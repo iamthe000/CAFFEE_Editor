@@ -1,5 +1,5 @@
 ## ☕ CAFFEE Editor
-
+<a href="ja-README.md">🇯🇵日本語版README</a><br>
 CAFFEE is a simple, customizable, and lightweight terminal text editor built with Python's `curses` library, inspired by the classic feel of editors like Nano or Pico.
 
 It focuses on basic text editing functionality while incorporating essential features like syntax highlighting (via color pairs), undo/redo history, and a clear, minimal UI.
