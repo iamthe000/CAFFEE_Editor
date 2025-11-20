@@ -368,9 +368,8 @@ class Editor:
             # 入力開始位置
             start_x = min(len(prompt_str), self.width - 1)
             
-            # default_valueがある場合は本来描画すべきだが、curses標準のgetstrでは
+
             # プリフィルが難しいため、ここでは単純な入力待ちとする
-            # (高度なInputが必要な場合は別途実装が必要)
             
             inp_bytes = self.stdscr.getstr(self.height - 2, start_x)
             result = inp_bytes.decode('utf-8')
