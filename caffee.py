@@ -7,6 +7,7 @@ import json
 import importlib.util
 import glob
 import datetime
+import shutil  # 追加: ファイル操作でバックアップを作成
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
@@ -135,6 +136,17 @@ class Editor:
         # プラグイン読み込み
         self.load_plugins()
 
+        # ステータス表示制御（期限付き表示）
+        self.status_expire_time = None
+
+        # ファイル変更検出用タイムスタンプ
+        self.file_mtime = None
+        if filename and os.path.exists(filename):
+            try:
+                self.file_mtime = os.path.getmtime(filename)
+            except Exception:
+                self.file_mtime = None
+
         # 新規ならスタート画面
         if not filename or not os.path.exists(filename):
              self.show_start_screen()
@@ -181,7 +193,10 @@ class Editor:
         
         for file_path in plugin_files:
             try:
-                module_name = os.path.basename(file_path)[:-3]
+                base = os.path.basename(file_path)
+                if base.startswith("_"):  # アンダースコア始まりは無視
+                    continue
+                module_name = base[:-3]
                 spec = importlib.util.spec_from_file_location(module_name, file_path)
                 if spec and spec.loader:
                     module = importlib.util.module_from_spec(spec)
@@ -189,13 +204,18 @@ class Editor:
                     
                     # init(editor) 関数があれば実行
                     if hasattr(module, 'init'):
-                        module.init(self)
-                        loaded_count += 1
+                        try:
+                            module.init(self)
+                            loaded_count += 1
+                        except Exception as e:
+                            # プラグイン個別エラーは詳細に記録
+                            self.set_status(f"Plugin init error ({module_name}): {e}", timeout=5)
             except Exception as e:
-                self.status_message = f"Plugin Error ({module_name}): {e}"
+                # module_name が未定義でもエラー処理できるように汎用メッセージ
+                self.set_status(f"Plugin load error ({file_path}): {e}", timeout=5)
 
         if loaded_count > 0:
-            self.status_message = f"Loaded {loaded_count} plugins."
+            self.set_status(f"Loaded {loaded_count} plugins.", timeout=3)
 
     def bind_key(self, key_code, func):
         """プラグインからキーバインドを登録する"""
@@ -343,13 +363,20 @@ class Editor:
         header = header.ljust(self.width)
         self.safe_addstr(0, 0, header, curses.color_pair(1) | curses.A_BOLD)
 
-        menu = "^X Exit  ^O Save  ^W Search  ^K Cut  ^U Paste  ^6 Mark  ^Z Undo"
+        menu = "^X Exit  ^O Save  ^W Search  ^K Cut  ^U Paste  ^6 Mark  ^Z Undo  ^A All  ^G Goto"
         self.safe_addstr(self.height - 1, 0, menu.ljust(self.width), curses.color_pair(1))
 
-        status_line = self.status_message.ljust(self.width - 10)
+        # ステータス表示（期限付き）
+        now = datetime.datetime.now()
         if self.status_message:
-            self.safe_addstr(self.height - 2, 0, status_line, curses.color_pair(2))
-            self.status_message = ""
+            if not self.status_expire_time or now <= self.status_expire_time:
+                status_line = self.status_message.ljust(self.width - 10)
+                self.safe_addstr(self.height - 2, 0, status_line, curses.color_pair(2))
+            else:
+                # 期限切れ
+                self.status_message = ""
+                self.status_expire_time = None
+
         pos_info = f" {self.cursor_y + 1}:{self.cursor_x + 1} "
         self.safe_addstr(self.height - 2, self.width - len(pos_info), pos_info, curses.color_pair(1))
 
@@ -471,14 +498,15 @@ class Editor:
         self.status_message = "Deleted line."
         
     def search_text(self):
-        self.status_message = "Search: "
+        # 既存の簡易検索に加えて、先頭から検索するオプションを保持（変更少）
+        self.set_status("Search: ", timeout=30)
         self.draw_ui()
         curses.echo()
         try: query = self.stdscr.getstr(self.height - 2, len("Search: ")).decode('utf-8')
         except: query = ""
         curses.noecho()
         if not query: 
-            self.status_message = "Search aborted."
+            self.set_status("Search aborted.", timeout=2)
             return
         found = False
         start_y = self.cursor_y
@@ -505,33 +533,99 @@ class Editor:
                         break
         if found:
             self.move_cursor(self.cursor_y, self.cursor_x, update_desired_x=True)
-            self.status_message = f"Found '{query}'"
+            self.set_status(f"Found '{query}'", timeout=3)
         else:
-            self.status_message = f"Not found '{query}'"
+            self.set_status(f"Not found '{query}'", timeout=3)
+
+    def set_status(self, msg, timeout=3):
+        """ステータスメッセージを一定時間表示する"""
+        self.status_message = msg
+        try:
+            self.status_expire_time = datetime.datetime.now() + datetime.timedelta(seconds=timeout)
+        except Exception:
+            self.status_expire_time = None
 
     def save_file(self):
         if not self.filename:
-            self.status_message = "Filename: "
+            self.set_status("Filename: ", timeout=10)
             self.draw_ui()
             curses.echo()
             try: fn = self.stdscr.getstr(self.height - 2, len("Filename: ")).decode('utf-8')
             except: fn = ""
             curses.noecho()
             if fn.strip(): self.filename = fn.strip()
-            else: self.status_message = "Aborted"; return
+            else: self.set_status("Aborted", timeout=2); return
 
         try:
-            with open(self.filename, 'w', encoding='utf-8') as f:
+            # 既存ファイルがあればバックアップを作成
+            if os.path.exists(self.filename):
+                try:
+                    bak_name = f"{self.filename}.{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.bak"
+                    shutil.copy2(self.filename, bak_name)
+                except Exception:
+                    # バックアップ失敗でも保存処理は続ける
+                    pass
+
+            tmp_name = f"{self.filename}.tmp"
+            with open(tmp_name, 'w', encoding='utf-8') as f:
                 f.write("\n".join(self.buffer.lines))
+            # 原子的に置換
+            os.replace(tmp_name, self.filename)
+            # 更新時刻を記録
+            try:
+                self.file_mtime = os.path.getmtime(self.filename)
+            except Exception:
+                self.file_mtime = None
+
             self.modified = False
             self.save_history(init=True)
-            self.status_message = f"Saved {len(self.buffer)} lines to {self.filename}."
-        except Exception as e: self.status_message = f"Error: {e}"
+            self.set_status(f"Saved {len(self.buffer)} lines to {self.filename}.", timeout=3)
+        except Exception as e:
+            self.set_status(f"Error saving file: {e}", timeout=5)
+
+    def select_all(self):
+        if self.mark_pos:
+            self.mark_pos = None
+            self.set_status("Selection cleared.", timeout=2)
+        else:
+            # 全選択: 最初から最後までを選択
+            last_y = len(self.buffer) - 1
+            last_x = len(self.buffer[last_y]) if self.buffer.lines else 0
+            self.mark_pos = (0, 0)
+            self.move_cursor(last_y, last_x, update_desired_x=True)
+            self.set_status("Selected all.", timeout=2)
+
+    def goto_line(self):
+        self.set_status("Goto line: ", timeout=10)
+        self.draw_ui()
+        curses.echo()
+        try:
+            s = self.stdscr.getstr(self.height - 2, len("Goto line: ")).decode('utf-8')
+        except:
+            s = ""
+        curses.noecho()
+        try:
+            n = int(s.strip())
+            self.move_cursor(max(0, min(n - 1, len(self.buffer) - 1)), 0, update_desired_x=True)
+            self.set_status(f"Goto {n}", timeout=2)
+        except Exception:
+            self.set_status("Invalid line number.", timeout=2)
 
     def main_loop(self):
         while True:
             self.stdscr.erase()
             self.height, self.width = self.stdscr.getmaxyx()
+            # 外部でファイルが更新されているか確認（通知のみ）
+            if self.filename and os.path.exists(self.filename):
+                try:
+                    mtime = os.path.getmtime(self.filename)
+                    if self.file_mtime and mtime != self.file_mtime:
+                        self.set_status("File changed on disk.", timeout=5)
+                        # 更新時刻を更新（自動リロードはしない）
+                        self.file_mtime = mtime
+                except Exception:
+                    pass
+
             self.draw_ui()
             self.draw_content()
             linenum_width = max(4, len(str(len(self.buffer)))) + 1
@@ -553,7 +647,7 @@ class Editor:
                 try:
                     self.plugin_key_bindings[key](self)
                 except Exception as e:
-                    self.status_message = f"Plugin Exception: {e}"
+                    self.set_status(f"Plugin Exception: {e}", timeout=5)
                 continue
 
             # --- 標準キー操作 ---
@@ -570,8 +664,10 @@ class Editor:
             elif key == 15: self.save_file() # Ctrl+O
             elif key == 23: self.search_text() # Ctrl+W
             elif key == 30: # Ctrl+6 (Mark)
-                if self.mark_pos: self.mark_pos = None; self.status_message = "Mark Unset"
-                else: self.mark_pos = (self.cursor_y, self.cursor_x); self.status_message = "Mark Set"
+                if self.mark_pos: self.mark_pos = None; self.set_status("Mark Unset", timeout=2)
+                else: self.mark_pos = (self.cursor_y, self.cursor_x); self.set_status("Mark Set", timeout=2)
+            elif key == 7: self.goto_line() # Ctrl+G
+            elif key == 1: self.select_all() # Ctrl+A
             elif key == 5: self.move_cursor(self.cursor_y, len(self.buffer.lines[self.cursor_y]), update_desired_x=True) # Ctrl+E
             elif key == 31: self.toggle_comment() # Ctrl+/
             elif key == 25: self.delete_line() # Ctrl+Y
@@ -632,6 +728,8 @@ class Editor:
 def main(stdscr):
     os.environ.setdefault('ESCDELAY', '25') 
     curses.raw()
+    # こちらはそのままでも良いが cbreak を併用して堅牢化できる
+    # curses.cbreak()
     fn = sys.argv[1] if len(sys.argv) > 1 else None
     config = load_config()
     Editor(stdscr, fn, config).main_loop()
