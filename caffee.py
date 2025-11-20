@@ -7,7 +7,18 @@ import json
 import importlib.util
 import glob
 import datetime
-import shutil  # 追加: ファイル操作でバックアップを作成
+import shutil
+import locale  # 追加: 日本語対応
+
+# ロケール設定: サポートされていない場合はスキップ
+for loc in ('', 'C.UTF-8', 'ja_JP.UTF-8', 'en_US.UTF-8'):
+    try:
+        locale.setlocale(locale.LC_ALL, loc)
+        break
+    except locale.Error:
+        continue
+
+code = locale.getpreferredencoding()
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
@@ -287,13 +298,19 @@ class Editor:
 
     # --- 描画 ---
     def safe_addstr(self, y, x, string, attr=0):
+        # 日本語など全角文字の幅を考慮して描画
         try:
-            if y >= self.height or x >= self.width: return
-            available = self.width - x
-            if len(string) > available:
-                string = string[:available]
-            self.stdscr.addstr(y, x, string, attr)
-        except curses.error:
+            import unicodedata
+            if y >= self.height or x >= self.width:
+                return
+            cx = x
+            for ch in string:
+                w = 2 if unicodedata.east_asian_width(ch) in 'WF' else 1
+                if cx + w > self.width:
+                    break
+                self.stdscr.addstr(y, cx, ch, attr)
+                cx += w
+        except Exception:
             pass
 
     def show_start_screen(self):
@@ -314,8 +331,8 @@ class Editor:
         for i, l in enumerate(logo):
             if my + i < self.height - 2:
                 self.safe_addstr(my + i, max(0, mx - 10), l)
-        self.safe_addstr(my + len(logo) + 1, max(0, mx - 12), f"CAFFEE Editor v{VERSION}", curses.A_BOLD)
-        self.safe_addstr(my + len(logo) + 3, max(0, mx - 15), "Press any key to brew...", curses.A_DIM)
+        self.safe_addstr(my + len(logo) + 1, max(0, mx - 12), f"CAFFEE エディタ v{VERSION}", curses.A_BOLD)
+        self.safe_addstr(my + len(logo) + 3, max(0, mx - 15), "何かキーを押してください...", curses.A_DIM)
         self.stdscr.refresh()
         self.stdscr.getch()
 
@@ -359,11 +376,11 @@ class Editor:
     def draw_ui(self):
         mark_status = "[MARK]" if self.mark_pos else ""
         mod_char = " *" if self.modified else ""
-        header = f" {EDITOR_NAME} v{VERSION} | {self.filename or 'New Buffer'}{mod_char}   {mark_status}"
+        header = f" {EDITOR_NAME} v{VERSION} | {self.filename or '新規バッファ'}{mod_char}   {mark_status}"
         header = header.ljust(self.width)
         self.safe_addstr(0, 0, header, curses.color_pair(1) | curses.A_BOLD)
 
-        menu = "^X Exit  ^O Save  ^W Search  ^K Cut  ^U Paste  ^6 Mark  ^Z Undo  ^A All  ^G Goto"
+        menu = "^X 終了  ^O 保存  ^W 検索  ^K 切取  ^U 貼付  ^6 マーク  ^Z 元に戻す  ^A 全選択  ^G 行移動"
         self.safe_addstr(self.height - 1, 0, menu.ljust(self.width), curses.color_pair(1))
 
         # ステータス表示（期限付き）
@@ -419,16 +436,25 @@ class Editor:
 
     def perform_cut(self):
         self.save_history()
-        if not self.mark_pos:
+        # 先に選択範囲を取得しておく（perform_copy が mark_pos をクリアするため）
+        sel = self.get_selection_range()
+        if not sel:
+            # 選択がない場合は現在行を切り取る
             if len(self.buffer) > 0:
                 self.clipboard = [self.buffer.lines.pop(self.cursor_y)]
                 if not self.buffer.lines: self.buffer.lines = [""]
                 self.move_cursor(self.cursor_y, 0)
                 self.modified = True
-                self.status_message = "Cut line."
+                # 状態表示は短時間表示にする
+                try:
+                    self.set_status("Cut line.", timeout=2)
+                except Exception:
+                    self.status_message = "Cut line."
             return
+
+        # 選択がある場合はコピーしてから削除処理（copy は mark_pos をクリアする）
         self.perform_copy()
-        start, end = self.get_selection_range()
+        start, end = sel
         if start[0] == end[0]:
             line = self.buffer.lines[start[0]]
             self.buffer.lines[start[0]] = line[:start[1]] + line[end[1]:]
@@ -440,7 +466,10 @@ class Editor:
         self.move_cursor(start[0], start[1])
         self.mark_pos = None
         self.modified = True
-        self.status_message = "Cut selection."
+        try:
+            self.set_status("Cut selection.", timeout=2)
+        except Exception:
+            self.status_message = "Cut selection."
 
     def perform_paste(self):
         if not self.clipboard:
@@ -498,15 +527,19 @@ class Editor:
         self.status_message = "Deleted line."
         
     def search_text(self):
-        # 既存の簡易検索に加えて、先頭から検索するオプションを保持（変更少）
-        self.set_status("Search: ", timeout=30)
+        self.set_status("検索: ", timeout=30)
         self.draw_ui()
         curses.echo()
-        try: query = self.stdscr.getstr(self.height - 2, len("Search: ")).decode('utf-8')
-        except: query = ""
+        try:
+            # 日本語入力対応
+            query = self.stdscr.get_wstr(self.height - 2, len("検索: ")).strip()
+            if isinstance(query, bytes):
+                query = query.decode('utf-8')
+        except Exception:
+            query = ""
         curses.noecho()
-        if not query: 
-            self.set_status("Search aborted.", timeout=2)
+        if not query:
+            self.set_status("検索中止", timeout=2)
             return
         found = False
         start_y = self.cursor_y
@@ -533,9 +566,9 @@ class Editor:
                         break
         if found:
             self.move_cursor(self.cursor_y, self.cursor_x, update_desired_x=True)
-            self.set_status(f"Found '{query}'", timeout=3)
+            self.set_status(f"見つかりました: '{query}'", timeout=3)
         else:
-            self.set_status(f"Not found '{query}'", timeout=3)
+            self.set_status(f"見つかりません: '{query}'", timeout=3)
 
     def set_status(self, msg, timeout=3):
         """ステータスメッセージを一定時間表示する"""
@@ -547,31 +580,34 @@ class Editor:
 
     def save_file(self):
         if not self.filename:
-            self.set_status("Filename: ", timeout=10)
+            self.set_status("ファイル名: ", timeout=10)
             self.draw_ui()
             curses.echo()
-            try: fn = self.stdscr.getstr(self.height - 2, len("Filename: ")).decode('utf-8')
-            except: fn = ""
+            try:
+                fn = self.stdscr.get_wstr(self.height - 2, len("ファイル名: ")).strip()
+                if isinstance(fn, bytes):
+                    fn = fn.decode('utf-8')
+            except Exception:
+                fn = ""
             curses.noecho()
-            if fn.strip(): self.filename = fn.strip()
-            else: self.set_status("Aborted", timeout=2); return
+            if fn.strip():
+                self.filename = fn.strip()
+            else:
+                self.set_status("中止", timeout=2)
+                return
 
         try:
-            # 既存ファイルがあればバックアップを作成
             if os.path.exists(self.filename):
                 try:
                     bak_name = f"{self.filename}.{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.bak"
                     shutil.copy2(self.filename, bak_name)
                 except Exception:
-                    # バックアップ失敗でも保存処理は続ける
                     pass
 
             tmp_name = f"{self.filename}.tmp"
             with open(tmp_name, 'w', encoding='utf-8') as f:
                 f.write("\n".join(self.buffer.lines))
-            # 原子的に置換
             os.replace(tmp_name, self.filename)
-            # 更新時刻を記録
             try:
                 self.file_mtime = os.path.getmtime(self.filename)
             except Exception:
@@ -579,37 +615,39 @@ class Editor:
 
             self.modified = False
             self.save_history(init=True)
-            self.set_status(f"Saved {len(self.buffer)} lines to {self.filename}.", timeout=3)
+            self.set_status(f"{self.filename} に {len(self.buffer)} 行保存しました。", timeout=3)
         except Exception as e:
-            self.set_status(f"Error saving file: {e}", timeout=5)
+            self.set_status(f"保存エラー: {e}", timeout=5)
 
     def select_all(self):
         if self.mark_pos:
             self.mark_pos = None
-            self.set_status("Selection cleared.", timeout=2)
+            self.set_status("選択解除", timeout=2)
         else:
             # 全選択: 最初から最後までを選択
             last_y = len(self.buffer) - 1
             last_x = len(self.buffer[last_y]) if self.buffer.lines else 0
             self.mark_pos = (0, 0)
             self.move_cursor(last_y, last_x, update_desired_x=True)
-            self.set_status("Selected all.", timeout=2)
+            self.set_status("全選択", timeout=2)
 
     def goto_line(self):
-        self.set_status("Goto line: ", timeout=10)
+        self.set_status("移動先行番号: ", timeout=10)
         self.draw_ui()
         curses.echo()
         try:
-            s = self.stdscr.getstr(self.height - 2, len("Goto line: ")).decode('utf-8')
-        except:
+            s = self.stdscr.get_wstr(self.height - 2, len("移動先行番号: ")).strip()
+            if isinstance(s, bytes):
+                s = s.decode('utf-8')
+        except Exception:
             s = ""
         curses.noecho()
         try:
             n = int(s.strip())
             self.move_cursor(max(0, min(n - 1, len(self.buffer) - 1)), 0, update_desired_x=True)
-            self.set_status(f"Goto {n}", timeout=2)
+            self.set_status(f"{n} 行目へ移動", timeout=2)
         except Exception:
-            self.set_status("Invalid line number.", timeout=2)
+            self.set_status("無効な番号", timeout=2)
 
     def main_loop(self):
         while True:
