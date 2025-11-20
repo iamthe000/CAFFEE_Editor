@@ -7,7 +7,7 @@ import json
 import importlib.util
 import glob
 import datetime
-import shutil  # 追加: ファイル操作でバックアップを作成
+import shutil
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
@@ -128,13 +128,10 @@ class Editor:
         
         # プラグイン用キーバインド辞書 {keycode: function}
         self.plugin_key_bindings = {}
-        self.plugin_commands = {} # 名前付きコマンド (将来用)
+        self.plugin_commands = {} 
 
         # 色設定
         self.init_colors()
-
-        # プラグイン読み込み
-        self.load_plugins()
 
         # ステータス表示制御（期限付き表示）
         self.status_expire_time = None
@@ -146,6 +143,9 @@ class Editor:
                 self.file_mtime = os.path.getmtime(filename)
             except Exception:
                 self.file_mtime = None
+
+        # プラグイン読み込み (init内でAPIを使えるように最後に呼ぶ)
+        self.load_plugins()
 
         # 新規ならスタート画面
         if not filename or not os.path.exists(filename):
@@ -208,10 +208,8 @@ class Editor:
                             module.init(self)
                             loaded_count += 1
                         except Exception as e:
-                            # プラグイン個別エラーは詳細に記録
                             self.set_status(f"Plugin init error ({module_name}): {e}", timeout=5)
             except Exception as e:
-                # module_name が未定義でもエラー処理できるように汎用メッセージ
                 self.set_status(f"Plugin load error ({file_path}): {e}", timeout=5)
 
         if loaded_count > 0:
@@ -220,6 +218,176 @@ class Editor:
     def bind_key(self, key_code, func):
         """プラグインからキーバインドを登録する"""
         self.plugin_key_bindings[key_code] = func
+
+    # ==========================================
+    # --- Plugin API (Public) ---
+    # プラグイン開発者が利用するための公開API群
+    # ==========================================
+
+    # 1. 状態取得系
+    def get_cursor_position(self):
+        """現在のカーソル位置 (y, x) を取得"""
+        return self.cursor_y, self.cursor_x
+
+    def get_line_content(self, y):
+        """指定された行 y の内容を取得"""
+        if 0 <= y < len(self.buffer):
+            return self.buffer.lines[y]
+        return ""
+
+    def get_buffer_lines(self):
+        """バッファ全体の行リストのコピーを取得 (参照渡し防止)"""
+        return self.buffer.get_content()
+
+    def get_line_count(self):
+        """バッファの行数を取得"""
+        return len(self.buffer)
+
+    def get_config_value(self, key):
+        """設定値を取得"""
+        return self.config.get(key)
+
+    def get_filename(self):
+        """ファイル名を取得"""
+        return self.filename
+        
+    def get_selection_text(self):
+        """現在選択されているテキストをリスト形式で取得。選択がなければNone"""
+        sel = self.get_selection_range()
+        if not sel:
+            return None
+        
+        start, end = sel
+        text_lines = []
+        
+        if start[0] == end[0]:
+            text_lines.append(self.buffer.lines[start[0]][start[1]:end[1]])
+        else:
+            text_lines.append(self.buffer.lines[start[0]][start[1]:])
+            for i in range(start[0] + 1, end[0]):
+                text_lines.append(self.buffer.lines[i])
+            text_lines.append(self.buffer.lines[end[0]][:end[1]])
+        return text_lines
+
+    # 2. 編集操作系
+    def move_cursor_to(self, y, x):
+        """カーソルを移動"""
+        self.move_cursor(y, x, update_desired_x=True, check_bounds=True)
+
+    def insert_text_at_cursor(self, text):
+        """カーソル位置にテキストを挿入"""
+        self.insert_text(text)
+
+    def save_current_history(self):
+        """現在の状態を履歴に保存 (編集前に呼ぶ)"""
+        self.save_history()
+
+    def set_modified(self, state=True):
+        """変更フラグを設定"""
+        self.modified = state
+
+    def delete_range(self, start_pos, end_pos):
+        """
+        指定範囲 (y1, x1) から (y2, x2) のテキストを削除する。
+        Undo履歴も保存される。
+        """
+        y1, x1 = start_pos
+        y2, x2 = end_pos
+        
+        # 範囲チェック
+        if not (0 <= y1 < len(self.buffer) and 0 <= y2 < len(self.buffer)):
+            self.set_status_message("Invalid delete range.", 2)
+            return
+
+        self.save_history()
+
+        if y1 == y2:
+            line = self.buffer.lines[y1]
+            # 範囲外アクセス防止
+            x1 = max(0, min(x1, len(line)))
+            x2 = max(0, min(x2, len(line)))
+            if x1 > x2: x1, x2 = x2, x1
+            self.buffer.lines[y1] = line[:x1] + line[x2:]
+        else:
+            if y1 > y2: y1, y2 = y2, y1; x1, x2 = x2, x1
+            
+            line_start = self.buffer.lines[y1][:x1]
+            line_end = self.buffer.lines[y2][x2:]
+            del self.buffer.lines[y1 + 1 : y2 + 1]
+            self.buffer.lines[y1] = line_start + line_end
+
+        self.move_cursor(y1, x1, update_desired_x=True)
+        self.modified = True
+
+    def replace_text(self, y, start_x, end_x, new_text):
+        """
+        指定行の指定範囲 (start_x, end_x) のテキストを new_text で置換する。
+        """
+        if not (0 <= y < len(self.buffer)):
+            return
+
+        self.save_history()
+        line = self.buffer.lines[y]
+        start_x = max(0, min(start_x, len(line)))
+        end_x = max(0, min(end_x, len(line)))
+        
+        prefix = line[:start_x]
+        suffix = line[end_x:]
+        
+        self.buffer.lines[y] = prefix + new_text + suffix
+        self.move_cursor(y, start_x + len(new_text), update_desired_x=True)
+        self.modified = True
+
+    # 3. UI/フィードバック系
+    def set_status_message(self, msg, timeout=3):
+        """ステータスメッセージを表示"""
+        self.set_status(msg, timeout)
+
+    def redraw_screen(self):
+        """画面全体を強制再描画"""
+        self.stdscr.erase()
+        self.draw_ui()
+        self.draw_content()
+        self.stdscr.refresh()
+
+    def prompt_user(self, prompt_msg, default_value=""):
+        """
+        ステータス行でユーザーに入力を求める。
+        Escapeでキャンセル時はNoneを返す。
+        """
+        self.set_status_message(prompt_msg, timeout=60)
+        self.draw_ui()
+        curses.echo()
+        
+        result = None
+        try:
+            # プロンプト表示
+            prompt_str = prompt_msg
+            self.safe_addstr(self.height - 2, 0, prompt_str.ljust(self.width), curses.color_pair(2))
+            
+            # 入力開始位置
+            start_x = min(len(prompt_str), self.width - 1)
+            
+            # default_valueがある場合は本来描画すべきだが、curses標準のgetstrでは
+            # プリフィルが難しいため、ここでは単純な入力待ちとする
+            # (高度なInputが必要な場合は別途実装が必要)
+            
+            inp_bytes = self.stdscr.getstr(self.height - 2, start_x)
+            result = inp_bytes.decode('utf-8')
+        except curses.error:
+            result = None
+        except Exception:
+            result = None
+        finally:
+            curses.noecho()
+            self.status_message = ""
+            self.redraw_screen()
+            
+        return result
+
+    # ==========================================
+    # --- End Plugin API ---
+    # ==========================================
 
     def insert_text(self, text):
         """現在位置にテキストを挿入するヘルパーメソッド"""
@@ -419,23 +587,16 @@ class Editor:
 
     def perform_cut(self):
         self.save_history()
-        # 先に選択範囲を取得しておく（perform_copy が mark_pos をクリアするため）
         sel = self.get_selection_range()
         if not sel:
-            # 選択がない場合は現在行を切り取る
             if len(self.buffer) > 0:
                 self.clipboard = [self.buffer.lines.pop(self.cursor_y)]
                 if not self.buffer.lines: self.buffer.lines = [""]
                 self.move_cursor(self.cursor_y, 0)
                 self.modified = True
-                # 状態表示は短時間表示にする
-                try:
-                    self.set_status("Cut line.", timeout=2)
-                except Exception:
-                    self.status_message = "Cut line."
+                self.set_status("Cut line.", timeout=2)
             return
 
-        # 選択がある場合はコピーしてから削除処理（copy は mark_pos をクリアする）
         self.perform_copy()
         start, end = sel
         if start[0] == end[0]:
@@ -449,10 +610,7 @@ class Editor:
         self.move_cursor(start[0], start[1])
         self.mark_pos = None
         self.modified = True
-        try:
-            self.set_status("Cut selection.", timeout=2)
-        except Exception:
-            self.status_message = "Cut selection."
+        self.set_status("Cut selection.", timeout=2)
 
     def perform_paste(self):
         if not self.clipboard:
@@ -510,7 +668,6 @@ class Editor:
         self.status_message = "Deleted line."
         
     def search_text(self):
-        # 既存の簡易検索に加えて、先頭から検索するオプションを保持（変更少）
         self.set_status("Search: ", timeout=30)
         self.draw_ui()
         curses.echo()
@@ -575,7 +732,6 @@ class Editor:
                     bak_name = f"{self.filename}.{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.bak"
                     shutil.copy2(self.filename, bak_name)
                 except Exception:
-                    # バックアップ失敗でも保存処理は続ける
                     pass
 
             tmp_name = f"{self.filename}.tmp"
@@ -633,7 +789,6 @@ class Editor:
                     mtime = os.path.getmtime(self.filename)
                     if self.file_mtime and mtime != self.file_mtime:
                         self.set_status("File changed on disk.", timeout=5)
-                        # 更新時刻を更新（自動リロードはしない）
                         self.file_mtime = mtime
                 except Exception:
                     pass
@@ -740,8 +895,6 @@ class Editor:
 def main(stdscr):
     os.environ.setdefault('ESCDELAY', '25') 
     curses.raw()
-    # こちらはそのままでも良いが cbreak を併用して堅牢化できる
-    # curses.cbreak()
     fn = sys.argv[1] if len(sys.argv) > 1 else None
     config = load_config()
     Editor(stdscr, fn, config).main_loop()
