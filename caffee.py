@@ -11,7 +11,7 @@ import shutil
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "1.1"
+VERSION = "1.2" #unreleased now | The latest version currently released
 
 DEFAULT_CONFIG = {
     "tab_width": 4,
@@ -667,43 +667,61 @@ class Editor:
         self.status_message = "Deleted line."
         
     def search_text(self):
-        self.set_status("Search: ", timeout=30)
+        self.set_status("Search (Regex): ", timeout=30)
         self.draw_ui()
         curses.echo()
-        try: query = self.stdscr.getstr(self.height - 2, len("Search: ")).decode('utf-8')
+        try: query = self.stdscr.getstr(self.height - 2, len("Search (Regex): ")).decode('utf-8')
         except: query = ""
         curses.noecho()
         if not query: 
             self.set_status("Search aborted.", timeout=2)
             return
+
+        try:
+            pattern = re.compile(query)
+        except re.error as e:
+            self.set_status(f"Invalid Regex: {e}", timeout=4)
+            return
+
         found = False
         start_y = self.cursor_y
         start_x = self.cursor_x
+
+        # 1. 現在行のカーソル以降を検索
         line = self.buffer.lines[start_y]
-        idx = line.find(query, start_x + 1)
-        if idx != -1:
-            self.cursor_y, self.cursor_x = start_y, idx
+        match = pattern.search(line, start_x + 1)
+        if match:
+            self.cursor_y, self.cursor_x = start_y, match.start()
             found = True
         else:
+            # 2. 次の行から最後まで検索
             for i in range(start_y + 1, len(self.buffer)):
-                idx = self.buffer.lines[i].find(query)
-                if idx != -1:
-                    self.cursor_y, self.cursor_x = i, idx
+                match = pattern.search(self.buffer.lines[i])
+                if match:
+                    self.cursor_y, self.cursor_x = i, match.start()
                     found = True
                     break
+            
+            # 3. 見つからなければ先頭から検索 (Wrap around)
             if not found:
                 for i in range(0, start_y + 1):
-                    limit = start_x if i == start_y else len(self.buffer.lines[i])
-                    idx = self.buffer.lines[i].find(query)
-                    if idx != -1 and idx < limit:
-                        self.cursor_y, self.cursor_x = i, idx
+                    match = pattern.search(self.buffer.lines[i])
+                    # 元の行に戻ってきた場合、最初の検索でカバーした範囲より前にあるか確認
+                    if i == start_y:
+                        if match and match.start() <= start_x:
+                            self.cursor_y, self.cursor_x = i, match.start()
+                            found = True
+                            break
+                    elif match:
+                        self.cursor_y, self.cursor_x = i, match.start()
                         found = True
                         break
+
         if found:
             self.move_cursor(self.cursor_y, self.cursor_x, update_desired_x=True)
-            self.set_status(f"Found '{query}'", timeout=3)
+            self.set_status(f"Found match.", timeout=3)
         else:
-            self.set_status(f"Not found '{query}'", timeout=3)
+            self.set_status(f"No match for '{query}'", timeout=3)
 
     def set_status(self, msg, timeout=3):
         """ステータスメッセージを一定時間表示する"""
