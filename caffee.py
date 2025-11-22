@@ -17,6 +17,8 @@ DEFAULT_CONFIG = {
     "tab_width": 4,
     "history_limit": 50,
     "use_soft_tabs": True,
+    "backup_subdir": "backup",
+    "backup_count": 5,
     "colors": {
         "header_text": "BLACK",
         "header_bg": "WHITE",
@@ -746,10 +748,31 @@ class Editor:
             # 既存ファイルがあればバックアップを作成
             if os.path.exists(self.filename):
                 try:
-                    bak_name = f"{self.filename}.{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.bak"
+                    setting_dir = get_config_dir()
+                    backup_subdir = self.config.get("backup_subdir", "backup")
+                    backup_dir = os.path.join(setting_dir, backup_subdir)
+
+                    if not os.path.exists(backup_dir):
+                        os.makedirs(backup_dir, exist_ok=True)
+
+                    safe_filename = self.filename.replace(os.path.sep, '_').replace(':', '_')
+                    timestamp = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+                    bak_name = os.path.join(backup_dir, f"{safe_filename}.{timestamp}.bak")
+
                     shutil.copy2(self.filename, bak_name)
-                except Exception:
-                    pass
+
+                    backup_limit = self.config.get("backup_count", 5)
+                    backup_pattern = os.path.join(backup_dir, f"{safe_filename}.*.bak")
+                    existing_backups = sorted(glob.glob(backup_pattern))
+
+                    if len(existing_backups) > backup_limit:
+                        for old_backup in existing_backups[:-backup_limit]:
+                            try:
+                                os.remove(old_backup)
+                            except OSError as e:
+                                self.set_status(f"Backup cleanup error: {e}", timeout=4)
+                except (IOError, OSError) as e:
+                    self.set_status(f"Backup error: {e}", timeout=4)
 
             tmp_name = f"{self.filename}.tmp"
             with open(tmp_name, 'w', encoding='utf-8') as f:
