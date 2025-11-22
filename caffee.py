@@ -8,10 +8,32 @@ import importlib.util
 import glob
 import datetime
 import shutil
+import traceback
+
+# --- 定数定義 (Key Codes) ---
+CTRL_A = 1
+CTRL_C = 3
+CTRL_E = 5
+CTRL_G = 7
+CTRL_K = 11
+CTRL_O = 15
+CTRL_R = 18
+CTRL_U = 21
+CTRL_W = 23
+CTRL_X = 24
+CTRL_Y = 25
+CTRL_Z = 26
+CTRL_MARK = 30    # Ctrl+6 or Ctrl+^
+CTRL_SLASH = 31   # Ctrl+/ (Unit Separator)
+KEY_TAB = 9
+KEY_ENTER = 10
+KEY_RETURN = 13
+KEY_BACKSPACE = 127
+KEY_BACKSPACE2 = 8
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "1.3" #unreleased now | Currently released latest version - 1.2.0
+VERSION = "1.2.1" #unreleased now | Currently released latest version - 1.2.0
 
 DEFAULT_CONFIG = {
     "tab_width": 4,
@@ -54,10 +76,12 @@ def load_config():
     config = DEFAULT_CONFIG.copy()
     setting_dir = get_config_dir()
     setting_file = os.path.join(setting_dir, "setting.json")
+    load_error = None
 
-    if not os.path.exists(setting_dir):
-        try: os.makedirs(setting_dir)
-        except: pass
+    try:
+        os.makedirs(setting_dir, exist_ok=True)
+    except OSError as e:
+        load_error = f"Config dir error: {e}"
 
     if os.path.exists(setting_file):
         try:
@@ -68,10 +92,10 @@ def load_config():
                         config["colors"].update(value)
                     else:
                         config[key] = value
-        except Exception:
-            pass
+        except (json.JSONDecodeError, OSError) as e:
+            load_error = f"Config load error: {e}"
             
-    return config
+    return config, load_error
 
 class Buffer:
     """エディタのテキスト内容を保持するクラス"""
@@ -94,13 +118,13 @@ class Buffer:
         return Buffer([line for line in self.lines])
 
 class Editor:
-    def __init__(self, stdscr, filename=None, config=None):
+    def __init__(self, stdscr, filename=None, config=None, config_error=None):
         self.stdscr = stdscr
         self.filename = filename
         self.config = config if config else DEFAULT_CONFIG
         
         # 初期バッファ設定
-        initial_lines = self.load_file(filename)
+        initial_lines, load_err = self.load_file(filename)
         self.buffer = Buffer(initial_lines)
         
         # カーソル・表示関連
@@ -116,6 +140,7 @@ class Editor:
         
         # 状態管理
         self.status_message = ""
+        self.status_expire_time = None
         self.modified = False
         self.clipboard = []
         
@@ -137,20 +162,23 @@ class Editor:
         # 色設定
         self.init_colors()
 
-        # ステータス表示制御（期限付き表示）
-        self.status_expire_time = None
-
         # ファイル変更検出用タイムスタンプ
         self.file_mtime = None
         if filename and os.path.exists(filename):
-            try: self.file_mtime = os.path.getmtime(filename)
-            except Exception: self.file_mtime = None
+            try: 
+                self.file_mtime = os.path.getmtime(filename)
+            except OSError: 
+                self.file_mtime = None
 
         # プラグイン読み込み
         self.load_plugins()
 
-        # 新規ならスタート画面
-        if not filename or not os.path.exists(filename):
+        # エラーメッセージの表示（優先度順）
+        if config_error:
+            self.set_status(config_error, timeout=5)
+        elif load_err:
+            self.set_status(load_err, timeout=5)
+        elif not filename or not os.path.exists(filename):
              self.show_start_screen()
 
     def _get_color(self, color_name):
@@ -158,34 +186,38 @@ class Editor:
 
     def init_colors(self):
         if curses.has_colors():
-            curses.start_color()
-            curses.use_default_colors()
-            c = self.config["colors"]
             try:
+                curses.start_color()
+                curses.use_default_colors()
+                c = self.config["colors"]
                 curses.init_pair(1, self._get_color(c["header_text"]), self._get_color(c["header_bg"]))
                 curses.init_pair(2, self._get_color(c["error_text"]), self._get_color(c["error_bg"]))
                 curses.init_pair(3, self._get_color(c["linenum_text"]), self._get_color(c["linenum_bg"]))
                 curses.init_pair(4, self._get_color(c["selection_text"]), self._get_color(c["selection_bg"]))
-            except:
+            except curses.error:
+                # 端末が色をサポートしていても初期化に失敗する場合のフォールバック
                 pass
 
     def load_file(self, filename):
+        """ファイルを読み込み、(行リスト, エラーメッセージ) を返す"""
         if filename and os.path.exists(filename):
             try:
                 with open(filename, 'r', encoding='utf-8') as f:
                     content = f.read().splitlines()
-                    return content if content else [""]
-            except Exception as e:
-                self.status_message = f"Error loading file: {e}"
-                return [""]
-        return [""]
+                    return (content if content else [""]), None
+            except (OSError, UnicodeDecodeError) as e:
+                return [""], f"Error loading file: {e}"
+        return [""], None
     
     # --- プラグインシステム ---
     def load_plugins(self):
         plugin_dir = os.path.join(get_config_dir(), "plugins")
         if not os.path.exists(plugin_dir):
-            try: os.makedirs(plugin_dir)
-            except: return
+            try: 
+                os.makedirs(plugin_dir, exist_ok=True)
+            except OSError as e:
+                self.set_status(f"Plugin dir create failed: {e}", timeout=5)
+                return
 
         plugin_files = glob.glob(os.path.join(plugin_dir, "*.py"))
         loaded_count = 0
@@ -200,13 +232,11 @@ class Editor:
                     module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)
                     if hasattr(module, 'init'):
-                        try:
-                            module.init(self)
-                            loaded_count += 1
-                        except Exception as e:
-                            self.set_status(f"Plugin init error ({module_name}): {e}", timeout=5)
+                        module.init(self)
+                        loaded_count += 1
             except Exception as e:
-                self.set_status(f"Plugin load error ({file_path}): {e}", timeout=5)
+                # プラグインのエラーはメインループを止めないようにここでキャッチ
+                self.set_status(f"Plugin load error ({os.path.basename(file_path)}): {e}", timeout=5)
 
         if loaded_count > 0:
             self.set_status(f"Loaded {loaded_count} plugins.", timeout=3)
@@ -395,7 +425,7 @@ class Editor:
             "    _______)",
             f" .-'-------|",
             f" | CAFFEE  |__",
-            f" |  v{VERSION}    |__)",
+            f" |  v{VERSION}  |__)",
             f" |_________|",
             "  `-------' "
         ]
@@ -464,7 +494,6 @@ class Editor:
         self.header_height = 1
 
         # 2. Menu Bar (Dynamic wrapping)
-        # 全ショートカットの定義
         shortcuts = [
             ("^X", "Exit"), ("^C", "Copy"), ("^O", "Save"), ("^K", "Cut"),
             ("^U", "Paste"), ("^W", "Search"), ("^Z", "Undo"), ("^R", "Redo"),
@@ -643,9 +672,12 @@ class Editor:
         self.draw_ui()
         curses.echo()
         status_y = self.height - self.menu_height - 1
-        try: query = self.stdscr.getstr(status_y, len("Search (Regex): ")).decode('utf-8')
-        except: query = ""
+        try: 
+            query = self.stdscr.getstr(status_y, len("Search (Regex): ")).decode('utf-8')
+        except Exception:
+            query = ""
         curses.noecho()
+        
         if not query: 
             self.set_status("Search aborted.", timeout=2)
             return
@@ -705,13 +737,19 @@ class Editor:
             self.draw_ui()
             curses.echo()
             status_y = self.height - self.menu_height - 1
-            try: fn = self.stdscr.getstr(status_y, len("Filename: ")).decode('utf-8')
-            except: fn = ""
+            try: 
+                fn = self.stdscr.getstr(status_y, len("Filename: ")).decode('utf-8')
+            except Exception:
+                fn = ""
             curses.noecho()
-            if fn.strip(): self.filename = fn.strip()
-            else: self.set_status("Aborted", timeout=2); return
+            if fn.strip(): 
+                self.filename = fn.strip()
+            else: 
+                self.set_status("Aborted", timeout=2)
+                return
 
         try:
+            # バックアップ作成処理
             if os.path.exists(self.filename):
                 try:
                     setting_dir = get_config_dir()
@@ -735,19 +773,24 @@ class Editor:
                         for old_backup in existing_backups[:-backup_limit]:
                             try: os.remove(old_backup)
                             except OSError: pass
-                except (IOError, OSError): pass
+                except (IOError, OSError) as e:
+                    self.set_status(f"Backup warning: {e}", timeout=4)
 
+            # Atomic Save: 一時ファイルに書き込んでからリネーム
             tmp_name = f"{self.filename}.tmp"
             with open(tmp_name, 'w', encoding='utf-8') as f:
                 f.write("\n".join(self.buffer.lines))
             os.replace(tmp_name, self.filename)
-            try: self.file_mtime = os.path.getmtime(self.filename)
-            except Exception: self.file_mtime = None
+            
+            try: 
+                self.file_mtime = os.path.getmtime(self.filename)
+            except OSError: 
+                self.file_mtime = None
 
             self.modified = False
             self.save_history(init=True)
             self.set_status(f"Saved {len(self.buffer)} lines to {self.filename}.", timeout=3)
-        except Exception as e:
+        except (IOError, OSError) as e:
             self.set_status(f"Error saving file: {e}", timeout=5)
 
     def select_all(self):
@@ -768,27 +811,29 @@ class Editor:
         status_y = self.height - self.menu_height - 1
         try:
             s = self.stdscr.getstr(status_y, len("Goto line: ")).decode('utf-8')
-        except:
+        except Exception:
             s = ""
         curses.noecho()
         try:
             n = int(s.strip())
             self.move_cursor(max(0, min(n - 1, len(self.buffer) - 1)), 0, update_desired_x=True)
             self.set_status(f"Goto {n}", timeout=2)
-        except Exception:
+        except ValueError:
             self.set_status("Invalid line number.", timeout=2)
 
     def main_loop(self):
         while True:
             self.stdscr.erase()
             self.height, self.width = self.stdscr.getmaxyx()
+            
+            # 外部変更の監視
             if self.filename and os.path.exists(self.filename):
                 try:
                     mtime = os.path.getmtime(self.filename)
                     if self.file_mtime and mtime != self.file_mtime:
                         self.set_status("File changed on disk.", timeout=5)
                         self.file_mtime = mtime
-                except Exception:
+                except OSError:
                     pass
 
             self.draw_ui()
@@ -802,51 +847,64 @@ class Editor:
             
             if 0 < screen_y <= edit_height:
                 try: self.stdscr.move(screen_y, min(screen_x, self.width - 1))
-                except: pass
+                except curses.error: pass
+            
             try:
                 self.stdscr.timeout(100)
                 key = self.stdscr.getch()
                 self.stdscr.timeout(-1)
             except KeyboardInterrupt:
-                # Ctrl+C is caught here in some environments
-                key = 3 
-            except curses.error: key = -1
+                key = CTRL_C
+            except curses.error: 
+                key = -1
             
             if key == -1: continue
 
             # --- プラグインフック ---
             if key in self.plugin_key_bindings:
-                try: self.plugin_key_bindings[key](self)
-                except Exception: pass
+                try: 
+                    self.plugin_key_bindings[key](self)
+                except Exception as e:
+                    self.set_status(f"Plugin Error: {e}", timeout=5)
                 continue
 
             # --- キーハンドリング ---
-            if key == 3:  # Ctrl+C -> COPY
+            if key == CTRL_C:
                 self.perform_copy()
-            elif key == 24: # Ctrl+X -> Exit
+            elif key == CTRL_X:
                 if self.modified:
                     self.status_message = "Save changes? (y/n/Esc)"
                     self.draw_ui()
                     while True:
                         ch = self.stdscr.getch()
-                        if ch in (ord('y'), ord('Y')): self.save_file(); return
-                        elif ch in (ord('n'), ord('N')): return
-                        elif ch == 27 or ch == 3: self.status_message = "Cancelled."; break
+                        if ch in (ord('y'), ord('Y')): 
+                            self.save_file()
+                            return
+                        elif ch in (ord('n'), ord('N')): 
+                            return
+                        elif ch == 27 or ch == CTRL_C: 
+                            self.status_message = "Cancelled."
+                            break
                 else: return
-            elif key == 15: self.save_file() # Ctrl+O
-            elif key == 23: self.search_text() # Ctrl+W
-            elif key == 30: # Ctrl+6 or Ctrl+^ (Mark)
-                if self.mark_pos: self.mark_pos = None; self.set_status("Mark Unset", timeout=2)
-                else: self.mark_pos = (self.cursor_y, self.cursor_x); self.set_status("Mark Set", timeout=2)
-            elif key == 7: self.goto_line() # Ctrl+G
-            elif key == 1: self.select_all() # Ctrl+A
-            elif key == 5: self.move_cursor(self.cursor_y, len(self.buffer.lines[self.cursor_y]), update_desired_x=True) # Ctrl+E
-            elif key == 31: self.toggle_comment() # Ctrl+/ (Unit Separator)
-            elif key == 25: self.delete_line() # Ctrl+Y
-            elif key == 11: self.perform_cut() # Ctrl+K
-            elif key == 21: self.perform_paste() # Ctrl+U
-            elif key == 26: self.undo() # Ctrl+Z
-            elif key == 18: self.redo() # Ctrl+R
+            elif key == CTRL_O: self.save_file()
+            elif key == CTRL_W: self.search_text()
+            elif key == CTRL_MARK:
+                if self.mark_pos: 
+                    self.mark_pos = None
+                    self.set_status("Mark Unset", timeout=2)
+                else: 
+                    self.mark_pos = (self.cursor_y, self.cursor_x)
+                    self.set_status("Mark Set", timeout=2)
+            elif key == CTRL_G: self.goto_line()
+            elif key == CTRL_A: self.select_all()
+            elif key == CTRL_E: 
+                self.move_cursor(self.cursor_y, len(self.buffer.lines[self.cursor_y]), update_desired_x=True)
+            elif key == CTRL_SLASH: self.toggle_comment()
+            elif key == CTRL_Y: self.delete_line()
+            elif key == CTRL_K: self.perform_cut()
+            elif key == CTRL_U: self.perform_paste()
+            elif key == CTRL_Z: self.undo()
+            elif key == CTRL_R: self.redo()
             elif key == curses.KEY_UP: self.move_cursor(self.cursor_y - 1, self.desired_x)
             elif key == curses.KEY_DOWN: self.move_cursor(self.cursor_y + 1, self.desired_x)
             elif key == curses.KEY_LEFT: self.move_cursor(self.cursor_y, self.cursor_x - 1, update_desired_x=True)
@@ -855,7 +913,7 @@ class Editor:
                 self.move_cursor(self.cursor_y - self.get_edit_height(), self.cursor_x, update_desired_x=True)
             elif key == curses.KEY_NPAGE: 
                 self.move_cursor(self.cursor_y + self.get_edit_height(), self.cursor_x, update_desired_x=True)
-            elif key in (curses.KEY_BACKSPACE, 127, 8):
+            elif key in (curses.KEY_BACKSPACE, KEY_BACKSPACE, KEY_BACKSPACE2):
                 if self.mark_pos: self.perform_cut() 
                 elif self.cursor_x > 0:
                     self.save_history()
@@ -870,15 +928,18 @@ class Editor:
                     del self.buffer.lines[self.cursor_y]
                     self.move_cursor(self.cursor_y - 1, prev_len, update_desired_x=True)
                     self.modified = True
-            elif key == 10 or key == 13: # Enter
+            elif key == KEY_ENTER or key == KEY_RETURN:
                 self.save_history()
                 line = self.buffer.lines[self.cursor_y]
-                indent = re.match(r'^(\s*)', line).group(1) if re.match(r'^(\s*)', line) else ""
+                indent = ""
+                match = re.match(r'^(\s*)', line)
+                if match:
+                    indent = match.group(1)
                 self.buffer.lines.insert(self.cursor_y + 1, indent + line[self.cursor_x:])
                 self.buffer.lines[self.cursor_y] = line[:self.cursor_x]
                 self.move_cursor(self.cursor_y + 1, len(indent), update_desired_x=True)
                 self.modified = True
-            elif key == 9: # Tab
+            elif key == KEY_TAB:
                 self.save_history()
                 tab_spaces = " " * self.config.get("tab_width", 4)
                 line = self.buffer.lines[self.cursor_y]
@@ -897,10 +958,12 @@ def main(stdscr):
     os.environ.setdefault('ESCDELAY', '25') 
     curses.raw()
     fn = sys.argv[1] if len(sys.argv) > 1 else None
-    config = load_config()
-    Editor(stdscr, fn, config).main_loop()
+    config, config_error = load_config()
+    Editor(stdscr, fn, config, config_error).main_loop()
 
 if __name__ == "__main__":
-    try: curses.wrapper(main)
+    try: 
+        curses.wrapper(main)
     except Exception as e:
-        import traceback; traceback.print_exc()
+        # curses終了後にトレースバックを表示
+        traceback.print_exc()
