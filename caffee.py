@@ -11,7 +11,7 @@ import shutil
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "1.2"
+VERSION = "1.3" #unreleased now | Currently released latest version - 1.2.0
 
 DEFAULT_CONFIG = {
     "tab_width": 4,
