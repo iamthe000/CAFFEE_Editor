@@ -51,7 +51,7 @@ except ImportError:
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "1.3.2" #unreleased now | Currently released latest version - 1.3.1
+VERSION = "1.3.2"
 
 DEFAULT_CONFIG = {
     "tab_width": 4,
@@ -727,22 +727,31 @@ class Editor:
 
     def show_start_screen(self):
         self.stdscr.clear()
+        # 新しいロゴ
         logo = [
-            "      )  (  ",
-            "     (   ) )",
-            "      ) ( ( ",
-            "    _______)",
-            f" .-'-------|",
-            f" | CAFFEE  |__",
-            f" |  v{VERSION}  |__)",
-            f" |_________|",
-            "  `-------' "
+            "                                             ) (",
+            "                                            (   ) )",
+            "                                             ) ( (",
+            "                                           _______)",
+            f"   _________    ________________________.-'-------|",
+            f"  / ____/   |  / ____/ ____/ ____/ ____/| CAFFEE  |__",
+            f" / /   / /| | / /_  / /_  / __/ / __/   | v{VERSION}  |__)",
+            f"/ /___/ ___ |/ __/ / __/ / /___/ /___   |_________|",
+            f"\____/_/  |_/_/   /_/   /_____/_____/    `-------'"
         ]
+        # 中央に表示するための計算
+        # 新しいロゴの幅（約50-55文字）に合わせて中央揃えの位置を調整
         my = self.height // 2 - 6
-        mx = self.width // 2
+        mx = self.width // 2 
+        
+        # 新しいロゴは幅が広いため、オフセットを調整
+        start_x_offset = 28 # ロゴの先頭文字"___|"が中央付近に来るように調整
+
         for i, l in enumerate(logo):
             if my + i < self.height - 2:
-                self.safe_addstr(my + i, max(0, mx - 10), l)
+                # ロゴの左端がmx - start_x_offsetに来るように配置
+                self.safe_addstr(my + i, max(0, mx - start_x_offset), l.rstrip()) # 末尾の空白を削除して描画
+                
         self.safe_addstr(my + len(logo) + 1, max(0, mx - 12), f"CAFFEE Editor v{VERSION}", curses.A_BOLD)
         self.safe_addstr(my + len(logo) + 3, max(0, mx - 15), "Press any key to brew...", curses.A_DIM)
         self.stdscr.refresh()
