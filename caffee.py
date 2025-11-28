@@ -51,7 +51,7 @@ except ImportError:
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 
 DEFAULT_CONFIG = {
     "tab_width": 4,
