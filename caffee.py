@@ -51,7 +51,7 @@ except ImportError:
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "1.3.1"
+VERSION = "1.3.2" #unreleased now | Currently released latest version - 1.3.1
 
 DEFAULT_CONFIG = {
     "tab_width": 4,
@@ -60,10 +60,10 @@ DEFAULT_CONFIG = {
     "backup_subdir": "backup",
     "backup_count": 5,
     # --- UI Layout Settings ---
-    "explorer_width": 25,
+    "explorer_width": 35,
     "terminal_height": 10,
-    "show_explorer_default": False,
-    "show_terminal_default": False,
+    "show_explorer_default": True,
+    "show_terminal_default": True,
     # --------------------------
     "colors": {
         "header_text": "BLACK",
@@ -81,8 +81,8 @@ DEFAULT_CONFIG = {
         "number": "BLUE",
         "zenkaku_bg": "RED",
         # --- UI Colors ---
-        "ui_border": "BLUE",
-        "explorer_dir": "BLUE",
+        "ui_border": "WHITE",
+        "explorer_dir": "WHITE",
         "explorer_file": "WHITE",
         "terminal_bg": "DEFAULT"
     }
