@@ -15,7 +15,7 @@ import subprocess
 
 # --- 定数定義 (Key Codes) ---
 CTRL_A = 1
-CTRL_B = 2
+CTRL_B = 2  # Build/Run Command
 CTRL_C = 3
 CTRL_D = 4
 CTRL_E = 5
@@ -51,8 +51,7 @@ except ImportError:
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "1.3.2"
-
+VERSION = "1.4.2" #unreleased now | Currently released latest version - 1.3.2
 DEFAULT_CONFIG = {
     "tab_width": 4,
     "history_limit": 50,
@@ -118,7 +117,7 @@ SYNTAX_RULES = {
         "numbers": r"\b\d+\b"
     },
     "c_cpp": {
-        "extensions": [".c", ".cpp", ".h", ".hpp"],
+        "extensions": [".c", ".cpp", ".h", ".hpp", ".cc"],
         "keywords": r"\b(int|float|double|char|void|if|else|for|while|return|struct|class|public|private|protected|include)\b",
         "comments": r"//.*",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
@@ -129,6 +128,13 @@ SYNTAX_RULES = {
         "keywords": r"\b(break|case|chan|const|continue|default|defer|else|fallthrough|for|func|go|goto|if|import|interface|map|package|range|return|select|struct|switch|type|var|true|false|nil|append|cap|close|complex|copy|delete|imag|len|make|new|panic|print|println|real|recover|bool|byte|complex64|complex128|error|float32|float64|int|int8|int16|int32|int64|rune|string|uint|uint8|uint16|uint32|uint64|uintptr)\b",
         "comments": r"//.*",
         "strings": r"(['\"`])(?:(?<!\\)\1|.)*?\1",
+        "numbers": r"\b\d+\b"
+    },
+    "rust": {
+        "extensions": [".rs"],
+        "keywords": r"\b(as|break|const|continue|crate|else|enum|extern|false|fn|for|if|impl|in|let|loop|match|mod|move|mut|pub|ref|return|self|Self|static|struct|super|trait|true|type|unsafe|use|where|while)\b",
+        "comments": r"//.*",
+        "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
         "numbers": r"\b\d+\b"
     },
     "html": {
@@ -437,8 +443,14 @@ class Editor:
             self.set_status(config_error, timeout=5)
         elif load_err:
             self.set_status(load_err, timeout=5)
-        elif not filename or not os.path.exists(filename):
-             self.show_start_screen()
+
+        # --- 修正点: スプラッシュ画面の制御 ---
+        if not filename:
+            # ファイルなし (対話モード): キー入力待ちで常駐
+            self.show_start_screen()
+        else:
+            # ファイルあり (新規・既存問わず): 2秒間(2000ms)ロゴを表示して自動遷移
+            self.show_start_screen(duration_ms=2000)
 
     def _get_color(self, color_name):
         return COLOR_MAP.get(color_name.upper(), -1)
@@ -679,7 +691,8 @@ class Editor:
         except curses.error:
             pass
 
-    def show_start_screen(self):
+    # --- 変更点: duration_ms 引数を追加 ---
+    def show_start_screen(self, duration_ms=None):
         self.stdscr.clear()
         # Pair 3 is CYAN (Text)
         logo_attr = curses.color_pair(3) | curses.A_BOLD
@@ -704,9 +717,14 @@ class Editor:
                 self.safe_addstr(my + i, max(0, mx - start_x_offset), l.rstrip(), logo_attr)
                 
         self.safe_addstr(my + len(logo) + 1, max(0, mx - 12), f"CAFFEE Editor v{VERSION}", logo_attr)
-        self.safe_addstr(my + len(logo) + 3, max(0, mx - 15), "Press any key to brew...", curses.A_DIM | curses.color_pair(3))
-        self.stdscr.refresh()
-        self.stdscr.getch()
+        
+        if duration_ms:
+             self.stdscr.refresh()
+             curses.napms(duration_ms)
+        else:
+            self.safe_addstr(my + len(logo) + 3, max(0, mx - 15), "Press any key to brew...", curses.A_DIM | curses.color_pair(3))
+            self.stdscr.refresh()
+            self.stdscr.getch()
 
     def get_selection_range(self):
         if not self.mark_pos: return None
@@ -889,14 +907,14 @@ class Editor:
         focus_map = {'editor': 'EDT', 'explorer': 'EXP', 'terminal': 'TRM'}
         focus_str = f"[{focus_map.get(self.active_pane, '---')}]"
 
-        header = f" {EDITOR_NAME} v{VERSION} | {self.filename or 'New Buffer'}{mod_char} | {syntax_name} | {focus_str} {mark_status}"
+        header = f" {EDITOR_NAME} v{VERSION} | {self.filename or 'New Buffer'} {mod_char} | {syntax_name} | {focus_str} {mark_status}"
         header = header.ljust(self.width)
         self.safe_addstr(0, 0, header, curses.color_pair(1) | curses.A_BOLD)
         self.header_height = 1
 
         shortcuts = [
-            ("^X", "Exit"), ("^C", "Copy"), ("^O", "Save"), ("^K", "Cut"),
-            ("^U", "Paste"), ("^W", "Search"), ("^Z", "Undo"), ("^R", "Redo"),
+            ("^X", "Exit"), ("^C", "Copy"), ("^O", "Save"), ("^B", "Build"),
+            ("^K", "Cut"), ("^U", "Paste"), ("^W", "Search"), ("^Z", "Undo"),
             ("^6", "Mark"), ("^A", "All"), ("^G", "Goto"), ("^Y", "DelLine"),
             ("^/", "Comment"), ("^F", "Explorer"), ("^T", "Terminal")
         ]
@@ -1250,6 +1268,36 @@ class Editor:
             self.active_pane = 'terminal'
         self.redraw_screen()
 
+    def run_build_command(self):
+        if not self.filename:
+            self.set_status("Cannot run: No filename provided.")
+            return
+            
+        # Run前に自動保存
+        if self.modified:
+            self.save_file()
+            
+        ext = os.path.splitext(self.filename)[1].lower()
+        base = os.path.splitext(self.filename)[0]
+        
+        cmd = ""
+        if ext == ".py": cmd = f"python3 \"{self.filename}\""
+        elif ext == ".js": cmd = f"node \"{self.filename}\""
+        elif ext == ".go": cmd = f"go run \"{self.filename}\""
+        elif ext == ".c": cmd = f"gcc \"{self.filename}\" -o \"{base}\" && \"./{base}\""
+        elif ext in [".cpp", ".cc"]: cmd = f"g++ \"{self.filename}\" -o \"{base}\" && \"./{base}\""
+        elif ext == ".sh": cmd = f"bash \"{self.filename}\""
+        elif ext == ".rs": cmd = f"rustc \"{self.filename}\" && \"./{base}\""
+        else:
+            self.set_status(f"No build command defined for {ext}")
+            return
+
+        if not self.show_terminal:
+            self.toggle_terminal()
+            
+        self.active_pane = 'terminal'
+        self.terminal.write_input(cmd + "\n")
+
     def main_loop(self):
         while True:
             self.stdscr.erase()
@@ -1334,6 +1382,9 @@ class Editor:
                 continue
             elif key_code == CTRL_T:
                 self.toggle_terminal()
+                continue
+            elif key_code == CTRL_B:
+                self.run_build_command()
                 continue
 
             if self.active_pane == 'explorer':
