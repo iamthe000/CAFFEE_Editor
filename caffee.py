@@ -184,6 +184,10 @@ ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 def strip_ansi(text):
     return ANSI_ESCAPE.sub('', text)
 
+def get_char_width(char):
+    """文字の表示幅を返す（半角=1, 全角=2）"""
+    return 2 if unicodedata.east_asian_width(char) in ('F', 'W', 'A') else 1
+
 class Buffer:
     """エディタのテキスト内容を保持するクラス"""
     def __init__(self, lines=None):
@@ -863,15 +867,28 @@ class Editor:
 
                 # --- 描画ループ (オフセット考慮) ---
                 base_x = edit_x + linenum_width
+                current_screen_x = base_x
+
                 for cx, char in enumerate(display_line):
+                    if current_screen_x >= edit_x + edit_w:
+                        break
+
                     attr = line_attrs[cx]
                     if self.is_in_selection(file_line_idx, cx):
                         attr = ATTR_SELECT
+
+                    char_width = get_char_width(char)
                     
-                    if char == '\u3000':
-                        self.safe_addstr(draw_y, base_x + cx, "　", ATTR_ZENKAKU)
+                    # 画面端をまたぐ文字は描画しない
+                    if current_screen_x + char_width > edit_x + edit_w:
+                        break
+
+                    if char == '\u3000': # 全角スペース
+                        self.safe_addstr(draw_y, current_screen_x, "　", ATTR_ZENKAKU)
                     else:
-                        self.safe_addstr(draw_y, base_x + cx, char, attr)
+                        self.safe_addstr(draw_y, current_screen_x, char, attr)
+
+                    current_screen_x += char_width
 
         # --- Explorer & Terminal Draw ---
         if self.show_explorer:
@@ -1303,8 +1320,7 @@ class Editor:
                 if self.cursor_y < len(self.buffer):
                     current_line_text = self.buffer.lines[self.cursor_y]
                     for char in current_line_text[:self.cursor_x]:
-                        w = unicodedata.east_asian_width(char)
-                        screen_x += 2 if w in ('F', 'W', 'A') else 1
+                        screen_x += get_char_width(char)
                 
                 edit_height = self.get_edit_height()
                 if edit_y <= screen_y < edit_y + edit_height:
