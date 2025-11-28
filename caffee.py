@@ -9,16 +9,25 @@ import glob
 import datetime
 import shutil
 import traceback
-import unicodedata  # 追加: 全角文字幅判定用
+import unicodedata
+import select  # 追加: 非同期I/O用
+import subprocess # 追加: ターミナル用
 
 # --- 定数定義 (Key Codes) ---
 CTRL_A = 1
+CTRL_B = 2
 CTRL_C = 3
+CTRL_D = 4
 CTRL_E = 5
+CTRL_F = 6  # 追加: File Explorer Toggle
 CTRL_G = 7
 CTRL_K = 11
+CTRL_L = 12 # 追加: Focus Cycle (Option)
+CTRL_N = 14
 CTRL_O = 15
+CTRL_P = 16
 CTRL_R = 18
+CTRL_T = 20 # 追加: Terminal Toggle
 CTRL_U = 21
 CTRL_W = 23
 CTRL_X = 24
@@ -31,6 +40,14 @@ KEY_ENTER = 10
 KEY_RETURN = 13
 KEY_BACKSPACE = 127
 KEY_BACKSPACE2 = 8
+KEY_ESC = 27
+
+# OS依存: ptyはUnix系のみ
+try:
+    import pty
+    HAS_PTY = True
+except ImportError:
+    HAS_PTY = False
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
@@ -42,6 +59,12 @@ DEFAULT_CONFIG = {
     "use_soft_tabs": True,
     "backup_subdir": "backup",
     "backup_count": 5,
+    # --- UI Layout Settings ---
+    "explorer_width": 25,
+    "terminal_height": 10,
+    "show_explorer_default": False,
+    "show_terminal_default": False,
+    # --------------------------
     "colors": {
         "header_text": "BLACK",
         "header_bg": "WHITE",
@@ -56,7 +79,12 @@ DEFAULT_CONFIG = {
         "string": "GREEN",
         "comment": "MAGENTA",
         "number": "BLUE",
-        "zenkaku_bg": "RED" # 全角スペース背景
+        "zenkaku_bg": "RED",
+        # --- UI Colors ---
+        "ui_border": "BLUE",
+        "explorer_dir": "BLUE",
+        "explorer_file": "WHITE",
+        "terminal_bg": "DEFAULT"
     }
 }
 
@@ -73,8 +101,7 @@ COLOR_MAP = {
     "DEFAULT": -1
 }
 
-# --- シンタックスハイライト定義 ---
-# 拡張子ごとの簡易的な正規表現ルール
+# --- シンタックスハイライト定義 (変更なし) ---
 SYNTAX_RULES = {
     "python": {
         "extensions": [".py", ".pyw"],
@@ -99,16 +126,13 @@ SYNTAX_RULES = {
     },
     "go": {
         "extensions": [".go"],
-        # Go keywords + common types + built-in functions
         "keywords": r"\b(break|case|chan|const|continue|default|defer|else|fallthrough|for|func|go|goto|if|import|interface|map|package|range|return|select|struct|switch|type|var|true|false|nil|append|cap|close|complex|copy|delete|imag|len|make|new|panic|print|println|real|recover|bool|byte|complex64|complex128|error|float32|float64|int|int8|int16|int32|int64|rune|string|uint|uint8|uint16|uint32|uint64|uintptr)\b",
         "comments": r"//.*",
-        # Added backtick for raw strings
         "strings": r"(['\"`])(?:(?<!\\)\1|.)*?\1",
         "numbers": r"\b\d+\b"
     },
     "html": {
         "extensions": [".html", ".htm"],
-        # Tags and common attributes treated as keywords
         "keywords": r"\b(html|head|body|title|meta|link|script|style|div|span|p|h[1-6]|a|img|ul|ol|li|table|tr|td|th|form|input|button|label|select|option|textarea|br|hr|class|id|src|href|alt|type|value|name|width|height)\b",
         "comments": r"",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
@@ -116,13 +140,9 @@ SYNTAX_RULES = {
     },
     "markdown": {
         "extensions": [".md", ".markdown"],
-        # Header (#) and List markers (-, *) -> Keyword Color
         "keywords": r"(^#+\s+.*)|(^\s*[\-\*+]\s+)",
-        # Blockquote (>) -> Comment Color
         "comments": r"^>.*",
-        # Inline code (`) and Bold (**) -> String Color
         "strings": r"(`[^`]+`|\*\*.*?\*\*)",
-        # Link brackets [] -> Number Color
         "numbers": r"\[.*?\]"
     }
 }
@@ -149,17 +169,20 @@ def load_config():
         try:
             with open(setting_file, 'r', encoding='utf-8') as f:
                 user_config = json.load(f)
-                # 再帰的にマージしていないので、colorsだけ特別扱い
                 if "colors" in user_config and isinstance(user_config["colors"], dict):
                     config["colors"].update(user_config["colors"])
                     del user_config["colors"]
-                
                 for key, value in user_config.items():
                     config[key] = value
         except (json.JSONDecodeError, OSError) as e:
             load_error = f"Config load error: {e}"
             
     return config, load_error
+
+# --- ユーティリティ: ANSIエスケープシーケンス削除 (簡易版) ---
+ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+def strip_ansi(text):
+    return ANSI_ESCAPE.sub('', text)
 
 class Buffer:
     """エディタのテキスト内容を保持するクラス"""
@@ -181,6 +204,199 @@ class Buffer:
     def clone(self):
         return Buffer([line for line in self.lines])
 
+# --- クラス定義: FileExplorer ---
+class FileExplorer:
+    def __init__(self, start_path="."):
+        self.current_path = os.path.abspath(start_path)
+        self.files = []
+        self.selected_index = 0
+        self.scroll_offset = 0
+        self.refresh_list()
+
+    def refresh_list(self):
+        try:
+            items = os.listdir(self.current_path)
+            # ディレクトリとファイルを分ける
+            dirs = sorted([f for f in items if os.path.isdir(os.path.join(self.current_path, f))])
+            files = sorted([f for f in items if not os.path.isdir(os.path.join(self.current_path, f))])
+            
+            self.files = [".."] + dirs + files
+            self.selected_index = 0
+            self.scroll_offset = 0
+        except OSError:
+            self.files = [".."]
+
+    def navigate(self, delta):
+        self.selected_index += delta
+        if self.selected_index < 0: self.selected_index = 0
+        if self.selected_index >= len(self.files): self.selected_index = len(self.files) - 1
+        
+        # スクロール追従
+        # 描画領域の高さは外部から与えられると想定、ここでは簡易的なロジック
+        pass 
+
+    def enter(self):
+        """選択項目を実行。ディレクトリなら移動、ファイルならパスを返す"""
+        if not self.files: return None
+        
+        selected = self.files[self.selected_index]
+        target = os.path.abspath(os.path.join(self.current_path, selected))
+        
+        if os.path.isdir(target):
+            self.current_path = target
+            self.refresh_list()
+            return None
+        else:
+            return target
+
+    def draw(self, stdscr, y, x, h, w, colors):
+        """描画処理"""
+        # 背景
+        for i in range(h):
+            try:
+                stdscr.addstr(y + i, x, " " * w, colors["ui_border"])
+                stdscr.addch(y + i, x + w - 1, '│', colors["ui_border"])
+            except curses.error: pass
+            
+        # タイトル
+        title = f" {os.path.basename(self.current_path)}/ "
+        if len(title) > w - 2: title = title[:w-2]
+        try:
+            stdscr.addstr(y, x, title, colors["header"] | curses.A_BOLD)
+        except curses.error: pass
+
+        # リスト
+        list_h = h - 1
+        if self.selected_index < self.scroll_offset:
+            self.scroll_offset = self.selected_index
+        elif self.selected_index >= self.scroll_offset + list_h:
+            self.scroll_offset = self.selected_index - list_h + 1
+
+        for i in range(list_h):
+            idx = self.scroll_offset + i
+            if idx >= len(self.files): break
+            
+            draw_y = y + 1 + i
+            f_name = self.files[idx]
+            
+            # 装飾
+            is_dir = os.path.isdir(os.path.join(self.current_path, f_name))
+            color = colors["dir"] if is_dir else colors["file"]
+            attr = color
+            
+            if idx == self.selected_index:
+                attr = attr | curses.A_REVERSE
+
+            display_name = f_name[:w-3]
+            try:
+                stdscr.addstr(draw_y, x + 1, display_name.ljust(w-2), attr)
+            except curses.error: pass
+
+
+# --- クラス定義: Terminal (PTY wrapper) ---
+class Terminal:
+    def __init__(self, height):
+        self.master_fd = None
+        self.slave_fd = None
+        self.pid = None
+        self.lines = []
+        self.height = height
+        self.scroll_offset = 0 # 0 means bottom (latest)
+        self.buffer_limit = 1000
+        
+        if HAS_PTY:
+            self.start_shell()
+        else:
+            self.lines = ["Terminal not supported on this OS (requires pty)."]
+
+    def start_shell(self):
+        # 環境変数設定
+        env = os.environ.copy()
+        env["TERM"] = "dumb" # 簡易端末として動作させる
+        
+        self.pid, self.master_fd = pty.fork()
+        if self.pid == 0:
+            # Child process
+            shell = env.get("SHELL", "/bin/sh")
+            try:
+                os.execvpe(shell, [shell], env)
+            except:
+                sys.exit(1)
+        else:
+            # Parent process
+            # Set non-blocking
+            os.set_blocking(self.master_fd, False)
+
+    def write_input(self, data):
+        if self.master_fd:
+            try:
+                os.write(self.master_fd, data.encode('utf-8'))
+            except OSError:
+                pass
+
+    def read_output(self):
+        if not self.master_fd: return False
+        try:
+            # selectで読み込み可能か確認
+            r, _, _ = select.select([self.master_fd], [], [], 0)
+            if self.master_fd in r:
+                data = os.read(self.master_fd, 1024)
+                if not data: return False
+                
+                # デコードして行に分割
+                text = data.decode('utf-8', errors='replace')
+                text = strip_ansi(text) # cursesでの表示崩れを防ぐためANSI除去
+                
+                new_lines = text.replace('\r\n', '\n').split('\n')
+                
+                if self.lines:
+                    self.lines[-1] += new_lines[0]
+                else:
+                    self.lines.append(new_lines[0])
+                
+                self.lines.extend(new_lines[1:])
+                
+                # バッファ制限
+                if len(self.lines) > self.buffer_limit:
+                    self.lines = self.lines[-self.buffer_limit:]
+                
+                # 自動スクロール（一番下にいる場合）
+                if self.scroll_offset == 0:
+                    pass 
+                
+                return True
+        except OSError:
+            pass
+        return False
+
+    def draw(self, stdscr, y, x, h, w, colors):
+        # Border
+        try:
+            stdscr.addstr(y, x, "─" * w, colors["ui_border"])
+            title = " Terminal "
+            stdscr.addstr(y, x + 2, title, colors["header"])
+        except curses.error: pass
+        
+        content_h = h - 1
+        content_y = y + 1
+        
+        # 表示する行の範囲を計算
+        total_lines = len(self.lines)
+        # scroll_offset: 0 = 最新, 正の値 = 過去へ遡る
+        end_idx = total_lines - self.scroll_offset
+        start_idx = max(0, end_idx - content_h)
+        
+        display_lines = self.lines[start_idx:end_idx]
+        
+        for i, line in enumerate(display_lines):
+            draw_line_y = content_y + i
+            if draw_line_y >= y + h: break
+            try:
+                # 行末までクリア
+                stdscr.addstr(draw_line_y, x, " " * w, colors["bg"])
+                stdscr.addstr(draw_line_y, x, line[:w], colors["bg"])
+            except curses.error: pass
+
 class Editor:
     def __init__(self, stdscr, filename=None, config=None, config_error=None):
         self.stdscr = stdscr
@@ -201,6 +417,19 @@ class Editor:
         self.menu_height = 1
         self.status_height = 1
         self.header_height = 1
+        
+        # --- UIパネル状態管理 ---
+        self.show_explorer = self.config.get("show_explorer_default", False)
+        self.show_terminal = self.config.get("show_terminal_default", False)
+        self.explorer_width = self.config.get("explorer_width", 25)
+        self.terminal_height = self.config.get("terminal_height", 10)
+        
+        # active_pane: 'editor', 'explorer', 'terminal'
+        self.active_pane = 'editor' 
+        
+        # コンポーネント初期化
+        self.explorer = FileExplorer(".")
+        self.terminal = Terminal(self.terminal_height)
         
         # 状態管理
         self.status_message = ""
@@ -240,7 +469,7 @@ class Editor:
         # プラグイン読み込み
         self.load_plugins()
 
-        # エラーメッセージの表示（優先度順）
+        # エラーメッセージの表示
         if config_error:
             self.set_status(config_error, timeout=5)
         elif load_err:
@@ -265,20 +494,22 @@ class Editor:
                 curses.init_pair(4, self._get_color(c["selection_text"]), self._get_color(c["selection_bg"]))
                 
                 # Syntax Highlighting Colors
-                # 5: Keyword, 6: String, 7: Comment, 8: Number
                 curses.init_pair(5, self._get_color(c.get("keyword", "YELLOW")), -1)
                 curses.init_pair(6, self._get_color(c.get("string", "GREEN")), -1)
                 curses.init_pair(7, self._get_color(c.get("comment", "MAGENTA")), -1)
                 curses.init_pair(8, self._get_color(c.get("number", "BLUE")), -1)
-                
-                # Zenkaku Space (Red Background)
                 curses.init_pair(9, curses.COLOR_WHITE, self._get_color(c.get("zenkaku_bg", "RED")))
                 
+                # UI Components
+                curses.init_pair(10, self._get_color(c.get("ui_border", "BLUE")), -1)
+                curses.init_pair(11, self._get_color(c.get("explorer_dir", "BLUE")), -1)
+                curses.init_pair(12, self._get_color(c.get("explorer_file", "WHITE")), -1)
+                curses.init_pair(13, curses.COLOR_WHITE, self._get_color(c.get("terminal_bg", "DEFAULT")))
+
             except curses.error:
                 pass
 
     def detect_syntax(self, filename):
-        """ファイル名からシンタックスルールを判定"""
         if not filename: return None
         _, ext = os.path.splitext(filename)
         for lang, rules in SYNTAX_RULES.items():
@@ -287,7 +518,6 @@ class Editor:
         return None
 
     def load_file(self, filename):
-        """ファイルを読み込み、(行リスト, エラーメッセージ) を返す"""
         if filename and os.path.exists(filename):
             try:
                 with open(filename, 'r', encoding='utf-8') as f:
@@ -297,15 +527,14 @@ class Editor:
                 return [""], f"Error loading file: {e}"
         return [""], None
     
-    # --- プラグインシステム ---
+    # --- プラグインシステム (省略なし) ---
     def load_plugins(self):
         plugin_dir = os.path.join(get_config_dir(), "plugins")
         if not os.path.exists(plugin_dir):
             try: 
                 os.makedirs(plugin_dir, exist_ok=True)
             except OSError as e:
-                # self.set_status(f"Plugin dir create failed: {e}", timeout=5)
-                pass # Silent fail for clean startup
+                pass 
                 return
 
         plugin_files = glob.glob(os.path.join(plugin_dir, "*.py"))
@@ -335,24 +564,12 @@ class Editor:
     # ==========================================
     # --- Plugin API (Public) ---
     # ==========================================
-    def get_cursor_position(self):
-        return self.cursor_y, self.cursor_x
-
-    def get_line_content(self, y):
-        if 0 <= y < len(self.buffer): return self.buffer.lines[y]
-        return ""
-
-    def get_buffer_lines(self):
-        return self.buffer.get_content()
-
-    def get_line_count(self):
-        return len(self.buffer)
-
-    def get_config_value(self, key):
-        return self.config.get(key)
-
-    def get_filename(self):
-        return self.filename
+    def get_cursor_position(self): return self.cursor_y, self.cursor_x
+    def get_line_content(self, y): return self.buffer.lines[y] if 0 <= y < len(self.buffer) else ""
+    def get_buffer_lines(self): return self.buffer.get_content()
+    def get_line_count(self): return len(self.buffer)
+    def get_config_value(self, key): return self.config.get(key)
+    def get_filename(self): return self.filename
         
     def get_selection_text(self):
         sel = self.get_selection_range()
@@ -543,14 +760,57 @@ class Editor:
         if y == end[0]: return x < end[1]
         return start[0] < y < end[0]
 
+    # --- レイアウト計算 ---
+    def get_edit_rect(self):
+        """エディタ領域の (y, x, h, w) を返す"""
+        y = self.header_height
+        x = 0
+        h = self.height - self.header_height - self.status_height - self.menu_height
+        w = self.width
+        
+        if self.show_terminal:
+            term_h = min(self.terminal_height, h - 5) # 最低限エディタ行を残す
+            h -= term_h
+            
+        if self.show_explorer:
+            exp_w = min(self.explorer_width, w - 20) # 最低限エディタ幅を残す
+            w -= exp_w
+            
+        return y, x, h, w
+
+    def get_explorer_rect(self):
+        if not self.show_explorer: return 0,0,0,0
+        _, _, edit_h, edit_w = self.get_edit_rect()
+        
+        y = self.header_height
+        w = min(self.explorer_width, self.width - 20)
+        x = self.width - w
+        # Explorerはターミナルの上までか、一番下までか？ -> ターミナルがあればその上までにする
+        h = self.height - self.header_height - self.status_height - self.menu_height
+        if self.show_terminal:
+            term_h = min(self.terminal_height, h - 5)
+            h -= term_h
+            
+        return y, x, h, w
+
+    def get_terminal_rect(self):
+        if not self.show_terminal: return 0,0,0,0
+        _, _, edit_h, _ = self.get_edit_rect()
+        y = self.header_height + edit_h
+        x = 0
+        w = self.width
+        # ターミナルの高さ
+        total_h = self.height - self.header_height - self.status_height - self.menu_height
+        h = min(self.terminal_height, total_h - 5)
+        return y, x, h, w
+
     def get_edit_height(self):
-        """現在のエディタ領域（行番号＋本文）の高さを計算"""
-        # Header(1) + Content + Status(1) + Menu(varies)
-        return max(1, self.height - self.header_height - self.status_height - self.menu_height)
+        _, _, h, _ = self.get_edit_rect()
+        return max(1, h)
 
     def draw_content(self):
         linenum_width = max(4, len(str(len(self.buffer)))) + 1
-        edit_height = self.get_edit_height()
+        edit_y, edit_x, edit_h, edit_w = self.get_edit_rect()
         
         # カラーペアID
         ATTR_NORMAL = 0
@@ -561,63 +821,81 @@ class Editor:
         ATTR_ZENKAKU = curses.color_pair(9)
         ATTR_SELECT = curses.color_pair(4)
 
-        for i in range(edit_height):
+        for i in range(edit_h):
             file_line_idx = self.scroll_offset + i
-            draw_y = i + self.header_height # ヘッダーの分下げる
+            draw_y = edit_y + i
             
-            # 背景クリア
-            self.safe_addstr(draw_y, 0, " " * self.width)
+            # 背景クリア (エディタ領域のみ)
+            try:
+                self.stdscr.addstr(draw_y, edit_x, " " * edit_w)
+            except curses.error: pass
             
             if file_line_idx >= len(self.buffer):
-                self.safe_addstr(draw_y, 0, "~", curses.color_pair(3))
+                self.safe_addstr(draw_y, edit_x, "~", curses.color_pair(3))
             else:
                 ln_str = str(file_line_idx + 1).rjust(linenum_width - 1) + " "
-                self.safe_addstr(draw_y, 0, ln_str, curses.color_pair(3))
+                self.safe_addstr(draw_y, edit_x, ln_str, curses.color_pair(3))
                 
                 line = self.buffer[file_line_idx]
-                max_content_width = self.width - linenum_width
+                max_content_width = edit_w - linenum_width
                 display_line = line[:max_content_width]
                 
-                # --- シンタックスハイライトの計算 ---
-                # 文字ごとの属性マップを作成 (初期値: NORMAL)
+                # --- シンタックスハイライト (変更なし) ---
                 line_attrs = [ATTR_NORMAL] * len(display_line)
                 
                 if self.current_syntax_rules:
-                    # キーワード
                     if "keywords" in self.current_syntax_rules:
                         for match in re.finditer(self.current_syntax_rules["keywords"], display_line):
                             for j in range(match.start(), match.end()):
                                 if j < len(line_attrs): line_attrs[j] = ATTR_KEYWORD
-                    # 数字
                     if "numbers" in self.current_syntax_rules:
                         for match in re.finditer(self.current_syntax_rules["numbers"], display_line):
                              for j in range(match.start(), match.end()):
                                 if j < len(line_attrs): line_attrs[j] = ATTR_NUMBER
-                    # 文字列 (簡易対応: キーワードを上書き)
                     if "strings" in self.current_syntax_rules:
                         for match in re.finditer(self.current_syntax_rules["strings"], display_line):
                             for j in range(match.start(), match.end()):
                                 if j < len(line_attrs): line_attrs[j] = ATTR_STRING
-                    # コメント (最強: 全てを上書き)
                     if "comments" in self.current_syntax_rules:
                          for match in re.finditer(self.current_syntax_rules["comments"], display_line):
                             for j in range(match.start(), match.end()):
                                 if j < len(line_attrs): line_attrs[j] = ATTR_COMMENT
 
-                # --- 描画ループ ---
+                # --- 描画ループ (オフセット考慮) ---
+                base_x = edit_x + linenum_width
                 for cx, char in enumerate(display_line):
                     attr = line_attrs[cx]
-
-                    # 選択範囲の上書き
                     if self.is_in_selection(file_line_idx, cx):
                         attr = ATTR_SELECT
                     
-                    # 全角スペースの特別処理 (選択範囲外の場合のみ赤くする、または選択中でも赤くするかはお好みで。ここは赤優先)
                     if char == '\u3000':
-                        # VSCode風に全角スペースを強調
-                        self.safe_addstr(draw_y, linenum_width + cx, "　", ATTR_ZENKAKU)
+                        self.safe_addstr(draw_y, base_x + cx, "　", ATTR_ZENKAKU)
                     else:
-                        self.safe_addstr(draw_y, linenum_width + cx, char, attr)
+                        self.safe_addstr(draw_y, base_x + cx, char, attr)
+
+        # --- Explorer & Terminal Draw ---
+        if self.show_explorer:
+            ey, ex, eh, ew = self.get_explorer_rect()
+            colors = {
+                "ui_border": curses.color_pair(10),
+                "header": curses.color_pair(1),
+                "dir": curses.color_pair(11),
+                "file": curses.color_pair(12)
+            }
+            if self.active_pane == 'explorer':
+                colors["ui_border"] = colors["ui_border"] | curses.A_BOLD
+            self.explorer.draw(self.stdscr, ey, ex, eh, ew, colors)
+
+        if self.show_terminal:
+            ty, tx, th, tw = self.get_terminal_rect()
+            colors = {
+                "ui_border": curses.color_pair(10),
+                "header": curses.color_pair(1),
+                "bg": curses.color_pair(13)
+            }
+            if self.active_pane == 'terminal':
+                colors["ui_border"] = colors["ui_border"] | curses.A_BOLD
+            self.terminal.draw(self.stdscr, ty, tx, th, tw, colors)
 
     def draw_ui(self):
         # 1. Header
@@ -625,11 +903,14 @@ class Editor:
         mod_char = " *" if self.modified else ""
         syntax_name = "Text"
         if self.current_syntax_rules:
-            # 簡易的に拡張子名などを表示したい場合
             ext_list = self.current_syntax_rules.get("extensions", [])
             if ext_list: syntax_name = ext_list[0].upper().replace(".", "")
 
-        header = f" {EDITOR_NAME} v{VERSION} | {self.filename or 'New Buffer'}{mod_char} | {syntax_name}   {mark_status}"
+        # Focus indicator
+        focus_map = {'editor': 'EDT', 'explorer': 'EXP', 'terminal': 'TRM'}
+        focus_str = f"[{focus_map.get(self.active_pane, '---')}]"
+
+        header = f" {EDITOR_NAME} v{VERSION} | {self.filename or 'New Buffer'}{mod_char} | {syntax_name} | {focus_str} {mark_status}"
         header = header.ljust(self.width)
         self.safe_addstr(0, 0, header, curses.color_pair(1) | curses.A_BOLD)
         self.header_height = 1
@@ -639,7 +920,7 @@ class Editor:
             ("^X", "Exit"), ("^C", "Copy"), ("^O", "Save"), ("^K", "Cut"),
             ("^U", "Paste"), ("^W", "Search"), ("^Z", "Undo"), ("^R", "Redo"),
             ("^6", "Mark"), ("^A", "All"), ("^G", "Goto"), ("^Y", "DelLine"),
-            ("^/", "Comment")
+            ("^/", "Comment"), ("^F", "Explorer"), ("^T", "Terminal")
         ]
 
         menu_lines = []
@@ -681,7 +962,6 @@ class Editor:
         if len(display_msg) > max_msg_len:
             display_msg = display_msg[:max_msg_len]
             
-        # 行全体を背景色で埋める
         self.safe_addstr(status_y, 0, " " * self.width, curses.color_pair(2))
         self.safe_addstr(status_y, 0, display_msg, curses.color_pair(2))
         self.safe_addstr(status_y, self.width - len(pos_info), pos_info, curses.color_pair(1))
@@ -708,7 +988,7 @@ class Editor:
         elif self.cursor_y >= self.scroll_offset + edit_height:
             self.scroll_offset = self.cursor_y - edit_height + 1
 
-    # --- 編集操作 ---
+    # --- 編集操作 (変更なし) ---
     def perform_copy(self):
         sel = self.get_selection_range()
         if not sel:
@@ -917,7 +1197,7 @@ class Editor:
                 except (IOError, OSError) as e:
                     self.set_status(f"Backup warning: {e}", timeout=4)
 
-            # Atomic Save: 一時ファイルに書き込んでからリネーム
+            # Atomic Save
             tmp_name = f"{self.filename}.tmp"
             with open(tmp_name, 'w', encoding='utf-8') as f:
                 f.write("\n".join(self.buffer.lines))
@@ -928,9 +1208,7 @@ class Editor:
             except OSError: 
                 self.file_mtime = None
             
-            # 保存後にファイル名が変わった（新規保存）場合、シンタックス再判定
             self.current_syntax_rules = self.detect_syntax(self.filename)
-            
             self.modified = False
             self.save_history(init=True)
             self.set_status(f"Saved {len(self.buffer)} lines to {self.filename}.", timeout=3)
@@ -965,12 +1243,36 @@ class Editor:
         except ValueError:
             self.set_status("Invalid line number.", timeout=2)
 
+    def toggle_explorer(self):
+        if self.show_explorer:
+            if self.active_pane == 'explorer':
+                self.show_explorer = False
+                self.active_pane = 'editor'
+            else:
+                self.active_pane = 'explorer'
+        else:
+            self.show_explorer = True
+            self.active_pane = 'explorer'
+        self.redraw_screen()
+
+    def toggle_terminal(self):
+        if self.show_terminal:
+            if self.active_pane == 'terminal':
+                self.show_terminal = False
+                self.active_pane = 'editor'
+            else:
+                self.active_pane = 'terminal'
+        else:
+            self.show_terminal = True
+            self.active_pane = 'terminal'
+        self.redraw_screen()
+
     def main_loop(self):
         while True:
             self.stdscr.erase()
             self.height, self.width = self.stdscr.getmaxyx()
             
-            # 外部変更の監視
+            # 外部変更の監視 (Editorペイン時のみ)
             if self.filename and os.path.exists(self.filename):
                 try:
                     mtime = os.path.getmtime(self.filename)
@@ -979,32 +1281,54 @@ class Editor:
                         self.file_mtime = mtime
                 except OSError:
                     pass
+            
+            # ターミナルからの非同期出力読み込み
+            if self.show_terminal and self.terminal:
+                if self.terminal.read_output():
+                    # 出力があった場合再描画が必要だが、
+                    # 入力待ち(get_wch)でブロックしていると更新されない
+                    # timeoutで対応する
+                    pass
 
             self.draw_ui()
             self.draw_content()
-            linenum_width = max(4, len(str(len(self.buffer)))) + 1
             
-            screen_y = self.cursor_y - self.scroll_offset + self.header_height
-            
-            # --- カーソル位置の視覚的補正 (全角対応) ---
-            # 論理位置 (self.cursor_x) までの文字幅を計算して screen_x を決定
-            screen_x = linenum_width
-            if self.cursor_y < len(self.buffer):
-                current_line_text = self.buffer.lines[self.cursor_y]
-                # cursor_xまでの部分文字列の幅を計算
-                for char in current_line_text[:self.cursor_x]:
-                    w = unicodedata.east_asian_width(char)
-                    screen_x += 2 if w in ('F', 'W', 'A') else 1
-            
-            edit_height = self.get_edit_height()
-            
-            if 0 < screen_y <= edit_height:
-                try: self.stdscr.move(screen_y, min(screen_x, self.width - 1))
+            # カーソル制御
+            if self.active_pane == 'editor':
+                linenum_width = max(4, len(str(len(self.buffer)))) + 1
+                edit_y, edit_x, _, _ = self.get_edit_rect()
+                screen_y = self.cursor_y - self.scroll_offset + edit_y
+                
+                screen_x = edit_x + linenum_width
+                if self.cursor_y < len(self.buffer):
+                    current_line_text = self.buffer.lines[self.cursor_y]
+                    for char in current_line_text[:self.cursor_x]:
+                        w = unicodedata.east_asian_width(char)
+                        screen_x += 2 if w in ('F', 'W', 'A') else 1
+                
+                edit_height = self.get_edit_height()
+                if edit_y <= screen_y < edit_y + edit_height:
+                    try: self.stdscr.move(screen_y, min(screen_x, self.width - 1))
+                    except curses.error: pass
+                curses.curs_set(1)
+            elif self.active_pane == 'explorer':
+                # Explorerのカーソル表示は行ハイライトで行うので、ハードウェアカーソルは隠す
+                curses.curs_set(0)
+            elif self.active_pane == 'terminal':
+                # ターミナルのカーソル制御は複雑なため、一旦末尾に置くか隠す
+                # ここでは簡易的に入力欄として一番下に置く
+                ty, tx, th, tw = self.get_terminal_rect()
+                try: self.stdscr.move(ty + th - 1, tx + 2)
                 except curses.error: pass
-            
+                curses.curs_set(1)
+
             try:
-                self.stdscr.timeout(100)
-                # getch -> get_wch に変更してマルチバイト入力を受け付ける
+                # ターミナルが動いているときはポーリング頻度を上げる
+                if self.show_terminal:
+                    self.stdscr.timeout(50) 
+                else:
+                    self.stdscr.timeout(100)
+                    
                 key_in = self.stdscr.get_wch()
                 self.stdscr.timeout(-1)
             except KeyboardInterrupt:
@@ -1012,36 +1336,86 @@ class Editor:
             except curses.error: 
                 key_in = -1
             
-            # 入力処理の振り分け
             key_code = -1
             char_input = None
 
             if isinstance(key_in, int):
-                # 特殊キーやタイムアウトなし(-1)の場合はそのまま
                 key_code = key_in
             elif isinstance(key_in, str):
-                # 文字入力の場合
                 if len(key_in) == 1:
                     code = ord(key_in)
-                    # ASCII制御文字 (Ctrl+Key, Tab, Enter, Backspace) のマッピング
-                    # Ctrl+A(1) ~ Ctrl+Z(26), Esc(27), etc.
                     if code < 32 or code == 127:
                         key_code = code
                     else:
-                        # 通常の文字入力 (a, A, あ, 🍺 など)
                         char_input = key_in
             
             if key_code == -1 and char_input is None: continue
 
-            # --- プラグインフック ---
-            if key_code in self.plugin_key_bindings:
-                try: 
-                    self.plugin_key_bindings[key_code](self)
-                except Exception as e:
-                    self.set_status(f"Plugin Error: {e}", timeout=5)
+            # --- グローバル・キー (Pane切り替え等) ---
+            if key_code == CTRL_F:
+                self.toggle_explorer()
+                continue
+            elif key_code == CTRL_T:
+                self.toggle_terminal()
                 continue
 
-            # --- キーハンドリング (key_codeを使用) ---
+            # --- Explorer Pane 操作 ---
+            if self.active_pane == 'explorer':
+                if key_code == curses.KEY_UP:
+                    self.explorer.navigate(-1)
+                elif key_code == curses.KEY_DOWN:
+                    self.explorer.navigate(1)
+                elif key_code in (KEY_ENTER, KEY_RETURN):
+                    res = self.explorer.enter()
+                    if res: # ファイル選択
+                        new_lines, err = self.load_file(res)
+                        if not err:
+                            self.buffer = Buffer(new_lines)
+                            self.filename = res
+                            self.file_mtime = os.path.getmtime(res)
+                            self.current_syntax_rules = self.detect_syntax(res)
+                            self.cursor_y = 0
+                            self.cursor_x = 0
+                            self.save_history(init=True)
+                            self.active_pane = 'editor' # 自動でエディタに戻る
+                        else:
+                            self.set_status(err)
+                elif key_code == KEY_ESC: # 閉じる/エディタへ戻る
+                    self.active_pane = 'editor'
+                continue
+
+            # --- Terminal Pane 操作 ---
+            if self.active_pane == 'terminal':
+                if key_code == KEY_ESC:
+                    self.active_pane = 'editor'
+                    continue
+                
+                # 入力をPTYへ送る
+                if char_input:
+                    self.terminal.write_input(char_input)
+                elif key_code == KEY_ENTER or key_code == KEY_RETURN:
+                    self.terminal.write_input("\n")
+                elif key_code in (KEY_BACKSPACE, KEY_BACKSPACE2):
+                    self.terminal.write_input("\x08")
+                elif key_code == KEY_TAB:
+                    self.terminal.write_input("\t")
+                elif key_code == CTRL_C:
+                    self.terminal.write_input("\x03")
+                # 矢印キー等の簡易対応 (ANSIシーケンス送信)
+                elif key_code == curses.KEY_UP: self.terminal.write_input("\x1b[A")
+                elif key_code == curses.KEY_DOWN: self.terminal.write_input("\x1b[B")
+                elif key_code == curses.KEY_RIGHT: self.terminal.write_input("\x1b[C")
+                elif key_code == curses.KEY_LEFT: self.terminal.write_input("\x1b[D")
+                
+                continue
+
+            # --- Editor Pane 操作 (既存ロジック) ---
+            # プラグインフック
+            if key_code in self.plugin_key_bindings:
+                try: self.plugin_key_bindings[key_code](self)
+                except Exception as e: self.set_status(f"Plugin Error: {e}", timeout=5)
+                continue
+
             if key_code == CTRL_C:
                 self.perform_copy()
             elif key_code == CTRL_X:
@@ -1049,8 +1423,7 @@ class Editor:
                     self.status_message = "Save changes? (y/n/Esc)"
                     self.draw_ui()
                     while True:
-                        try:
-                            ch = self.stdscr.getch() # ここはY/N判定だけなのでgetchでOK
+                        try: ch = self.stdscr.getch()
                         except: ch = -1
                         if ch in (ord('y'), ord('Y')): 
                             self.save_file()
@@ -1122,7 +1495,6 @@ class Editor:
                 self.move_cursor(self.cursor_y, self.cursor_x + len(tab_spaces), update_desired_x=True)
                 self.modified = True
             
-            # --- 文字入力 (ASCII および マルチバイト) ---
             elif char_input:
                 self.save_history()
                 line = self.buffer.lines[self.cursor_y]
@@ -1141,5 +1513,4 @@ if __name__ == "__main__":
     try: 
         curses.wrapper(main)
     except Exception as e:
-        # curses終了後にトレースバックを表示
         traceback.print_exc()
