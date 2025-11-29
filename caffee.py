@@ -2013,16 +2013,18 @@ class Editor:
                     if res:
                         new_lines, err = self.load_file(res)
                         if not err:
-                            # 最初のタブの内容を更新
-                            self.tabs[0].buffer = Buffer(new_lines)
-                            self.tabs[0].filename = res
-                            self.tabs[0].file_mtime = os.path.getmtime(res)
-                            self.tabs[0].current_syntax_rules = self.detect_syntax(res)
-                            self.tabs[0].cursor_y = 0
-                            self.tabs[0].cursor_x = 0
-                            self.tabs[0].col_offset = 0
-                            self.tabs[0].save_history(init=True)
-                            self.active_tab_idx = 0
+                            # アクティブなタブの内容を更新
+                            self.buffer = Buffer(new_lines)
+                            self.filename = res
+                            try:
+                                self.file_mtime = os.path.getmtime(res)
+                            except OSError:
+                                self.file_mtime = None
+                            self.current_syntax_rules = self.detect_syntax(res)
+                            self.cursor_y = 0
+                            self.cursor_x = 0
+                            self.col_offset = 0
+                            self.save_history(init=True)
                             self.active_pane = 'editor'
                         else:
                             self.set_status(err)
