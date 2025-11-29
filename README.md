@@ -1,6 +1,7 @@
 # CAFFEE Command Line Text Editor
 <a href="ja-README.md">🇯🇵日本語版README</a>
 <a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">公式UI日本語化プラグイン</a>
+<a href="Nuitka.md">Steps to speed up with Nuitka</a>
 
 CAFFEE is a lightweight terminal text editor written in Python using the curses library.  
 It aims to be simple, extensible via plugins, and suitable for quick edits inside a terminal.
