@@ -388,7 +388,7 @@ class SettingsManager:
 
     def apply_edit(self):
         item = self.get_current_item()
-        if not item: 
+        if not item:
             self.edit_mode = False
             return
 
@@ -398,7 +398,7 @@ class SettingsManager:
                 new_value = int(self.edit_buffer)
             elif item["type"] == "str":
                 new_value = self.edit_buffer
-            
+
             if new_value is not None:
                 item["value"] = new_value
                 self.config[item["key"]] = new_value
@@ -412,7 +412,7 @@ class SettingsManager:
     def save_settings(self):
         setting_dir = get_config_dir()
         setting_file = os.path.join(setting_dir, "setting.json")
-        
+
         # DEFAULT_CONFIGと比較し、変更された項目のみ保存
         user_config = {}
         for key, value in self.config.items():
@@ -451,17 +451,17 @@ class SettingsManager:
 
             item = self.items[idx]
             y = list_start_y + i
-            
+
             attr = curses.A_REVERSE if idx == self.selected_index else curses.A_NORMAL
 
             key_str = f" {item['key']}: "
             val_str = str(item['value'])
-            
+
             if idx == self.selected_index and self.edit_mode:
                 val_str = self.edit_buffer + "_"
 
             display_str = f"{key_str}{val_str}".ljust(width)
-            
+
             try:
                 stdscr.addstr(y, 0, display_str, attr)
             except curses.error: pass
@@ -932,7 +932,7 @@ class Editor:
             return
 
         self.config = new_config
-        
+
         # Update components
         self.init_colors() # Recalculate color pairs
         self.explorer_width = self.config.get("explorer_width", 25)
@@ -1126,7 +1126,7 @@ class Editor:
                             with open(setting_file, 'w') as f:
                                 json.dump({}, f)
                         except OSError: pass
-                            
+
                     new_lines, err = self.load_file(setting_file)
                     if not err:
                         self.buffer = Buffer(new_lines)
@@ -1144,7 +1144,7 @@ class Editor:
                     self.active_pane = 'settings_manager'
                     break
                 # if choice is -1, do nothing and stay on start screen
-                
+
             elif ch == CTRL_P:
                 # プラグインマネージャーへ遷移
                 self.active_pane = 'plugin_manager'
@@ -1160,13 +1160,13 @@ class Editor:
         """設定メニューを表示し、ユーザーの選択を待つ"""
         menu_items = ["[1] Open setting.json", "[2] Choice setting"]
         selected_index = 0
-        
+
         while True:
             self.stdscr.erase()
             self.height, self.width = self.stdscr.getmaxyx()
 
             title = "--- Settings Menu ---"
-            
+
             title_y = self.height // 2 - 5
             self.safe_addstr(title_y, self.width // 2 - len(title) // 2, title, curses.color_pair(1))
 
@@ -1175,7 +1175,7 @@ class Editor:
                 x = self.width // 2 - len(item) // 2
                 attr = curses.A_REVERSE if i == selected_index else curses.A_NORMAL
                 self.safe_addstr(y, x, item, attr)
-            
+
             self.stdscr.refresh()
 
             try:
@@ -1193,7 +1193,7 @@ class Editor:
                 return selected_index
             elif ch == KEY_ESC:
                 return -1 # Cancel
-    
+
     def show_start_screen(self, duration_ms=None, interactive=False):
         self.stdscr.clear()
         # Pair 3 is CYAN (Text)
