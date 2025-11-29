@@ -52,7 +52,7 @@ except ImportError:
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "1.4.0" #unreleased now | Currently released latest version - 1.3.2
+VERSION = "2.0.0"
 DEFAULT_CONFIG = {
     "tab_width": 4,
     "history_limit": 50,
