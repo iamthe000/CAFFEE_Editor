@@ -333,6 +333,140 @@ class PluginManager:
                 stdscr.addstr(y, 1, display_str.ljust(width-2), attr)
             except curses.error: pass
 
+
+class SettingsManager:
+    """設定を対話的に編集するクラス"""
+    def __init__(self, config):
+        self.config = config
+        self.items = []
+        self.selected_index = 0
+        self.scroll_offset = 0
+        self.edit_mode = False
+        self.edit_buffer = ""
+        self.refresh_list()
+
+    def refresh_list(self):
+        self.items = []
+        # settings.jsonに保存したい項目を列挙
+        for key, value in self.config.items():
+            if key == "colors": continue # Colors are handled separately
+            self.items.append({"key": key, "value": value, "type": type(value).__name__})
+        self.items.sort(key=lambda x: x["key"])
+
+    def navigate(self, delta):
+        if self.edit_mode: return
+        self.selected_index = max(0, min(self.selected_index + delta, len(self.items) - 1))
+
+    def get_current_item(self):
+        if not self.items: return None
+        return self.items[self.selected_index]
+
+    def toggle_bool(self):
+        item = self.get_current_item()
+        if item and item["type"] == "bool":
+            item["value"] = not item["value"]
+            self.config[item["key"]] = item["value"]
+            return "Value changed. Press ^O to save."
+        return None
+
+    def start_edit(self):
+        item = self.get_current_item()
+        if item and item["type"] in ("int", "str"):
+            self.edit_mode = True
+            self.edit_buffer = str(item["value"])
+
+    def handle_edit_input(self, char_code):
+        if char_code in (KEY_ENTER, KEY_RETURN):
+            self.apply_edit()
+        elif char_code in (KEY_BACKSPACE, KEY_BACKSPACE2):
+            self.edit_buffer = self.edit_buffer[:-1]
+        elif char_code == KEY_ESC:
+            self.edit_mode = False
+        # Check if it's a printable character
+        elif 32 <= char_code <= 126:
+            self.edit_buffer += chr(char_code)
+
+    def apply_edit(self):
+        item = self.get_current_item()
+        if not item: 
+            self.edit_mode = False
+            return
+
+        try:
+            new_value = None
+            if item["type"] == "int":
+                new_value = int(self.edit_buffer)
+            elif item["type"] == "str":
+                new_value = self.edit_buffer
+            
+            if new_value is not None:
+                item["value"] = new_value
+                self.config[item["key"]] = new_value
+                self.edit_mode = False
+                return "Value changed. Press ^O to save."
+        except (ValueError, TypeError):
+            return "Invalid value for type " + item["type"]
+        self.edit_mode = False
+        return None
+
+    def save_settings(self):
+        setting_dir = get_config_dir()
+        setting_file = os.path.join(setting_dir, "setting.json")
+        
+        # DEFAULT_CONFIGと比較し、変更された項目のみ保存
+        user_config = {}
+        for key, value in self.config.items():
+            if key in DEFAULT_CONFIG and DEFAULT_CONFIG[key] != value:
+                user_config[key] = value
+            elif key not in DEFAULT_CONFIG:
+                 user_config[key] = value
+
+        try:
+            with open(setting_file, 'w', encoding='utf-8') as f:
+                json.dump(user_config, f, indent=4)
+            return "Settings saved to setting.json"
+        except OSError as e:
+            return f"Error saving settings: {e}"
+
+    def draw(self, stdscr, height, width, colors):
+        stdscr.erase()
+        header = " Settings Manager "
+        try:
+            stdscr.addstr(0, 0, header.ljust(width), colors["header"] | curses.A_BOLD)
+            stdscr.addstr(1, 0, " [Enter] Edit  [Space] Toggle Bool  [^O] Save  [Esc] Back ".ljust(width), colors["ui_border"])
+            stdscr.addstr(2, 0, "─" * width, colors["ui_border"])
+        except curses.error: pass
+
+        list_h = height - 4
+        list_start_y = 3
+
+        if self.selected_index < self.scroll_offset:
+            self.scroll_offset = self.selected_index
+        elif self.selected_index >= self.scroll_offset + list_h:
+            self.scroll_offset = self.selected_index - list_h + 1
+
+        for i in range(list_h):
+            idx = self.scroll_offset + i
+            if idx >= len(self.items): break
+
+            item = self.items[idx]
+            y = list_start_y + i
+            
+            attr = curses.A_REVERSE if idx == self.selected_index else curses.A_NORMAL
+
+            key_str = f" {item['key']}: "
+            val_str = str(item['value'])
+            
+            if idx == self.selected_index and self.edit_mode:
+                val_str = self.edit_buffer + "_"
+
+            display_str = f"{key_str}{val_str}".ljust(width)
+            
+            try:
+                stdscr.addstr(y, 0, display_str, attr)
+            except curses.error: pass
+
+
 class FileExplorer:
     def __init__(self, start_path="."):
         self.current_path = os.path.abspath(start_path)
@@ -562,6 +696,7 @@ class Editor:
         self.explorer = FileExplorer(".")
         self.terminal = Terminal(self.terminal_height)
         self.plugin_manager = PluginManager(get_config_dir())
+        self.settings_manager = SettingsManager(self.config)
         
         self.status_message = ""
         self.status_expire_time = None
@@ -789,6 +924,26 @@ class Editor:
         if loaded_count > 0:
             self.set_status(f"Loaded {loaded_count} plugins.", timeout=3)
 
+    def reload_config(self):
+        """設定を再読み込みして、関連コンポーネントを更新する"""
+        new_config, load_error = load_config()
+        if load_error:
+            self.set_status(f"Reload Error: {load_error}", timeout=5)
+            return
+
+        self.config = new_config
+        
+        # Update components
+        self.init_colors() # Recalculate color pairs
+        self.explorer_width = self.config.get("explorer_width", 25)
+        self.terminal_height = self.config.get("terminal_height", 10)
+
+        # Refresh settings manager's view of the config
+        self.settings_manager = SettingsManager(self.config)
+
+        self.set_status("Configuration reloaded.", timeout=3)
+        self.redraw_screen()
+
     def bind_key(self, key_code, func):
         self.plugin_key_bindings[key_code] = func
 
@@ -962,23 +1117,34 @@ class Editor:
                 break
 
             if ch == CTRL_S:
-                # 設定ファイルを開く
-                setting_file = os.path.join(get_config_dir(), "setting.json")
-                # ロード処理
-                new_lines, err = self.load_file(setting_file)
-                if not err:
-                    self.buffer = Buffer(new_lines)
-                    self.filename = setting_file
-                    self.file_mtime = os.path.getmtime(setting_file)
-                    self.current_syntax_rules = self.detect_syntax(setting_file)
-                    self.cursor_y = 0
-                    self.cursor_x = 0
-                    self.col_offset = 0
-                    self.save_history(init=True)
-                    self.active_pane = 'editor'
-                else:
-                    self.set_status(err)
-                break
+                choice = self.run_settings_menu()
+                if choice == 0: # Open setting.json
+                    setting_file = os.path.join(get_config_dir(), "setting.json")
+                    if not os.path.exists(setting_file):
+                        # Create empty file if not exists
+                        try:
+                            with open(setting_file, 'w') as f:
+                                json.dump({}, f)
+                        except OSError: pass
+                            
+                    new_lines, err = self.load_file(setting_file)
+                    if not err:
+                        self.buffer = Buffer(new_lines)
+                        self.filename = setting_file
+                        try:
+                            self.file_mtime = os.path.getmtime(setting_file)
+                        except OSError: self.file_mtime = None
+                        self.current_syntax_rules = self.detect_syntax(setting_file)
+                        self.save_history(init=True)
+                        self.active_pane = 'editor'
+                        break
+                    else:
+                        self.set_status(err)
+                elif choice == 1: # Choice setting
+                    self.active_pane = 'settings_manager'
+                    break
+                # if choice is -1, do nothing and stay on start screen
+                
             elif ch == CTRL_P:
                 # プラグインマネージャーへ遷移
                 self.active_pane = 'plugin_manager'
@@ -990,6 +1156,44 @@ class Editor:
                 # 任意のキーでエディタへ
                 break
 
+    def run_settings_menu(self):
+        """設定メニューを表示し、ユーザーの選択を待つ"""
+        menu_items = ["[1] Open setting.json", "[2] Choice setting"]
+        selected_index = 0
+        
+        while True:
+            self.stdscr.erase()
+            self.height, self.width = self.stdscr.getmaxyx()
+
+            title = "--- Settings Menu ---"
+            
+            title_y = self.height // 2 - 5
+            self.safe_addstr(title_y, self.width // 2 - len(title) // 2, title, curses.color_pair(1))
+
+            for i, item in enumerate(menu_items):
+                y = title_y + 2 + i
+                x = self.width // 2 - len(item) // 2
+                attr = curses.A_REVERSE if i == selected_index else curses.A_NORMAL
+                self.safe_addstr(y, x, item, attr)
+            
+            self.stdscr.refresh()
+
+            try:
+                ch = self.stdscr.getch()
+            except curses.error:
+                ch = -1
+
+            if ch == curses.KEY_UP:
+                selected_index = (selected_index - 1) % len(menu_items)
+            elif ch == curses.KEY_DOWN:
+                selected_index = (selected_index + 1) % len(menu_items)
+            elif ch in (KEY_ENTER, KEY_RETURN, ord('1'), ord('2')):
+                if ch == ord('1') : selected_index = 0
+                if ch == ord('2') : selected_index = 1
+                return selected_index
+            elif ch == KEY_ESC:
+                return -1 # Cancel
+    
     def show_start_screen(self, duration_ms=None, interactive=False):
         self.stdscr.clear()
         # Pair 3 is CYAN (Text)
@@ -1101,6 +1305,14 @@ class Editor:
                 "ui_border": curses.color_pair(10)
             }
             self.plugin_manager.draw(self.stdscr, self.height, self.width, colors)
+            return
+
+        if self.active_pane == 'settings_manager':
+            colors = {
+                "header": curses.color_pair(1),
+                "ui_border": curses.color_pair(10)
+            }
+            self.settings_manager.draw(self.stdscr, self.height, self.width, colors)
             return
             
         if self.active_pane == 'full_screen_explorer':
@@ -1225,7 +1437,7 @@ class Editor:
 
     def draw_ui(self):
         # Plugin Manager Mode doesn't use standard UI
-        if self.active_pane == 'plugin_manager':
+        if self.active_pane in ('plugin_manager', 'settings_manager'):
             return
             
         if self.active_pane == 'full_screen_explorer':
@@ -1700,6 +1912,8 @@ class Editor:
                 curses.curs_set(1)
             elif self.active_pane == 'plugin_manager':
                 curses.curs_set(0)
+            elif self.active_pane == 'settings_manager':
+                curses.curs_set(0)
             elif self.active_pane == 'full_screen_explorer':
                 curses.curs_set(0)
 
@@ -1759,6 +1973,34 @@ class Editor:
                     if msg: self.set_status(msg, timeout=4)
                 elif key_code == KEY_ESC:
                     self.active_pane = 'editor'
+                continue
+
+            # --- Handle Settings Manager Input ---
+            if self.active_pane == 'settings_manager':
+                if self.settings_manager.edit_mode:
+                    if key_code in (KEY_ENTER, KEY_RETURN, KEY_ESC, KEY_BACKSPACE, KEY_BACKSPACE2) or (char_input and ord(char_input) >= 32):
+                       res = self.settings_manager.handle_edit_input(key_code if key_code != -1 else ord(char_input))
+                       if res: self.set_status(res, timeout=3)
+                else:
+                    if key_code == curses.KEY_UP:
+                        self.settings_manager.navigate(-1)
+                    elif key_code == curses.KEY_DOWN:
+                        self.settings_manager.navigate(1)
+                    elif key_code in (KEY_ENTER, KEY_RETURN):
+                        self.settings_manager.start_edit()
+                    elif key_code == ord(' '):
+                        res = self.settings_manager.toggle_bool()
+                        if res: self.set_status(res, timeout=3)
+                    elif key_code == CTRL_O:
+                        res = self.settings_manager.save_settings()
+                        self.set_status(res, timeout=3)
+                        # Ask to reload
+                        reload_choice = self.prompt_user("Reload config to apply changes now? (y/n)", default_value="y")
+                        if reload_choice and reload_choice.lower() == 'y':
+                            self.reload_config()
+
+                    elif key_code == KEY_ESC:
+                        self.active_pane = 'editor'
                 continue
             
             if self.active_pane == 'full_screen_explorer':
