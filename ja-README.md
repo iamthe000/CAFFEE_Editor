@@ -1,6 +1,6 @@
 # ☕ CAFFEE (カフィー)
-<a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">公式UI日本語化プラグイン</a><br>
-<a href="Nuitka_Step.md">Nuitkaによる高速化手順</a>
+<a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">公式UI日本語化プラグイン</a>
+<a href="Nuitka_Step.md">Nuitkaによる高速化手順</a><br>
 CAFFEEは、**Python**で書かれ、**curses**ライブラリを使用した軽量なターミナルテキストエディタです。シンプルな操作感とプラグインによる拡張性を目指し、ターミナル内での素早い編集に適しています。
 
 ## 💡 特徴
