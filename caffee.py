@@ -1196,6 +1196,7 @@ class Editor:
 
     def show_start_screen(self, duration_ms=None, interactive=False):
         self.stdscr.clear()
+        self.draw_tab_bar()
         # Pair 3 is CYAN (Text)
         logo_attr = curses.color_pair(3) | curses.A_BOLD
         
@@ -1446,17 +1447,7 @@ class Editor:
             return
 
         # --- Tab Bar Drawing ---
-        self.safe_addstr(0, 0, " " * self.width, curses.color_pair(10))
-        current_x = 0
-        for i, tab in enumerate(self.tabs):
-            name = os.path.basename(tab.filename) if tab.filename else "untitled"
-            mod = "*" if tab.modified else ""
-            display = f" {i+1}:{name}{mod} "
-            
-            pair = curses.color_pair(14) if i == self.active_tab_idx else curses.color_pair(15)
-            self.safe_addstr(0, current_x, display, pair)
-            current_x += len(display)
-            if current_x >= self.width: break
+        self.draw_tab_bar()
         
         # --- Header ---
         mark_status = "[MARK]" if self.mark_pos else ""
@@ -1521,6 +1512,19 @@ class Editor:
         self.safe_addstr(status_y, 0, display_msg, curses.color_pair(2))
         self.safe_addstr(status_y, self.width - len(pos_info), pos_info, curses.color_pair(1))
 
+    def draw_tab_bar(self):
+        """Draws the tab bar at the top of the screen"""
+        self.safe_addstr(0, 0, " " * self.width, curses.color_pair(10))
+        current_x = 0
+        for i, tab in enumerate(self.tabs):
+            name = os.path.basename(tab.filename) if tab.filename else "untitled"
+            mod = "*" if tab.modified else ""
+            display = f" {i+1}:{name}{mod} "
+            
+            pair = curses.color_pair(14) if i == self.active_tab_idx else curses.color_pair(15)
+            self.safe_addstr(0, current_x, display, pair)
+            current_x += len(display)
+            if current_x >= self.width: break
 
     def move_cursor(self, y, x, update_desired_x=False, check_bounds=False):
         new_y = max(0, min(y, len(self.buffer) - 1))
