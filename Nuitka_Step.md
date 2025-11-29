@@ -1,4 +1,4 @@
-## How to Speed Up with Nuitka
+## How to Speed Up with Nuitka(debian only　※and chromeOS of Linux-Shell)
 
 ```
 python3 -m venv myenv
