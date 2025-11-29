@@ -27,6 +27,7 @@ CTRL_N = 14
 CTRL_O = 15
 CTRL_P = 16
 CTRL_R = 18
+CTRL_S = 19 # Edit Settings (Start Screen)
 CTRL_T = 20
 CTRL_U = 21
 CTRL_W = 23
@@ -51,13 +52,18 @@ except ImportError:
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "1.4.2" #unreleased now | Currently released latest version - 1.3.2
+VERSION = "1.4.0" #unreleased now | Currently released latest version - 1.3.2
 DEFAULT_CONFIG = {
     "tab_width": 4,
     "history_limit": 50,
     "use_soft_tabs": True,
     "backup_subdir": "backup",
     "backup_count": 5,
+    # --- Splash / Start Screen Settings ---
+    "show_splash": True,         # スプラッシュ画面を表示するか
+    "splash_duration": 500,     # 自動遷移する場合の表示時間(ms)
+    "start_screen_mode": True,  # 起動時にスタート画面(インタラクティブ)を有効にするか
+    # --------------------------
     # --- UI Layout Settings ---
     "explorer_width": 35,
     "terminal_height": 10,
@@ -213,6 +219,116 @@ class Buffer:
     def clone(self):
         return Buffer([line for line in self.lines])
 
+class PluginManager:
+    """プラグインの有効・無効を管理するクラス"""
+    def __init__(self, config_dir):
+        self.plugin_dir = os.path.join(config_dir, "plugins")
+        self.disabled_dir = os.path.join(self.plugin_dir, "disabled")
+        self.items = []
+        self.selected_index = 0
+        self.scroll_offset = 0
+        
+        # ディレクトリ作成
+        if not os.path.exists(self.disabled_dir):
+            try:
+                os.makedirs(self.disabled_dir, exist_ok=True)
+            except OSError: pass
+        
+        self.refresh_list()
+
+    def refresh_list(self):
+        self.items = []
+        
+        # Active plugins
+        if os.path.exists(self.plugin_dir):
+            for f in glob.glob(os.path.join(self.plugin_dir, "*.py")):
+                if os.path.basename(f).startswith("_"): continue
+                self.items.append({
+                    "name": os.path.basename(f),
+                    "path": f,
+                    "enabled": True
+                })
+
+        # Disabled plugins
+        if os.path.exists(self.disabled_dir):
+            for f in glob.glob(os.path.join(self.disabled_dir, "*.py")):
+                self.items.append({
+                    "name": os.path.basename(f),
+                    "path": f,
+                    "enabled": False
+                })
+        
+        self.items.sort(key=lambda x: x["name"])
+        # インデックス範囲の修正
+        if self.selected_index >= len(self.items) and len(self.items) > 0:
+            self.selected_index = len(self.items) - 1
+
+    def navigate(self, delta):
+        if not self.items: return
+        self.selected_index += delta
+        if self.selected_index < 0: self.selected_index = 0
+        if self.selected_index >= len(self.items): self.selected_index = len(self.items) - 1
+
+    def toggle_current(self):
+        if not self.items: return None
+        
+        item = self.items[self.selected_index]
+        src = item["path"]
+        
+        try:
+            if item["enabled"]:
+                # Disable it (move to disabled_dir)
+                dst = os.path.join(self.disabled_dir, item["name"])
+                shutil.move(src, dst)
+            else:
+                # Enable it (move to plugin_dir)
+                dst = os.path.join(self.plugin_dir, item["name"])
+                shutil.move(src, dst)
+            
+            self.refresh_list()
+            return "Restart editor to apply changes."
+        except OSError as e:
+            return f"Error toggling plugin: {e}"
+
+    def draw(self, stdscr, height, width, colors):
+        stdscr.erase()
+        
+        # Header
+        header = " Plugin Manager "
+        try:
+            stdscr.addstr(0, 0, header.ljust(width), colors["header"] | curses.A_BOLD)
+            stdscr.addstr(1, 0, " [Space/Enter] Toggle  [Esc] Back ", colors["ui_border"])
+            stdscr.addstr(2, 0, "─" * width, colors["ui_border"])
+        except curses.error: pass
+        
+        # List
+        list_h = height - 4
+        list_start_y = 3
+        
+        if self.selected_index < self.scroll_offset:
+            self.scroll_offset = self.selected_index
+        elif self.selected_index >= self.scroll_offset + list_h:
+            self.scroll_offset = self.selected_index - list_h + 1
+
+        for i in range(list_h):
+            idx = self.scroll_offset + i
+            if idx >= len(self.items): break
+            
+            item = self.items[idx]
+            y = list_start_y + i
+            
+            marker = "[x]" if item["enabled"] else "[ ]"
+            display_str = f" {marker} {item['name']}"
+            
+            attr = curses.A_NORMAL
+            if idx == self.selected_index:
+                attr = curses.A_REVERSE
+            
+            try:
+                # 名前部分の色分け
+                stdscr.addstr(y, 1, display_str.ljust(width-2), attr)
+            except curses.error: pass
+
 class FileExplorer:
     def __init__(self, start_path="."):
         self.current_path = os.path.abspath(start_path)
@@ -252,6 +368,7 @@ class FileExplorer:
             return target
 
     def draw(self, stdscr, y, x, h, w, colors):
+        # 枠線の描画
         for i in range(h):
             try:
                 stdscr.addstr(y + i, x, " " * w, colors["ui_border"])
@@ -262,9 +379,12 @@ class FileExplorer:
         if len(title) > w - 2: title = title[:w-2]
         try:
             stdscr.addstr(y, x, title, colors["header"] | curses.A_BOLD)
+            stdscr.addstr(y + 1, x, "─" * (w-1), colors["ui_border"])
         except curses.error: pass
 
-        list_h = h - 1
+        list_h = h - 2 # Title + separator
+        list_start_y = y + 2
+        
         if self.selected_index < self.scroll_offset:
             self.scroll_offset = self.selected_index
         elif self.selected_index >= self.scroll_offset + list_h:
@@ -274,17 +394,20 @@ class FileExplorer:
             idx = self.scroll_offset + i
             if idx >= len(self.files): break
             
-            draw_y = y + 1 + i
+            draw_y = list_start_y + i
             f_name = self.files[idx]
             
             is_dir = os.path.isdir(os.path.join(self.current_path, f_name))
             color = colors["dir"] if is_dir else colors["file"]
             attr = color
             
+            prefix = "📁 " if is_dir else "📄 "
+            if f_name == "..": prefix = "⬆️  "
+
             if idx == self.selected_index:
                 attr = attr | curses.A_REVERSE
 
-            display_name = f_name[:w-3]
+            display_name = (prefix + f_name)[:w-3]
             try:
                 stdscr.addstr(draw_y, x + 1, display_name.ljust(w-2), attr)
             except curses.error: pass
@@ -409,6 +532,7 @@ class Editor:
         
         self.explorer = FileExplorer(".")
         self.terminal = Terminal(self.terminal_height)
+        self.plugin_manager = PluginManager(get_config_dir())
         
         self.status_message = ""
         self.status_expire_time = None
@@ -444,13 +568,22 @@ class Editor:
         elif load_err:
             self.set_status(load_err, timeout=5)
 
-        # --- 修正点: スプラッシュ画面の制御 ---
-        if not filename:
-            # ファイルなし (対話モード): キー入力待ちで常駐
-            self.show_start_screen()
-        else:
-            # ファイルあり (新規・既存問わず): 2秒間(2000ms)ロゴを表示して自動遷移
-            self.show_start_screen(duration_ms=2000)
+        # --- 起動画面制御 ---
+        show_splash = self.config.get("show_splash", True)
+        
+        if show_splash:
+            # 1. ファイルなし & スタートスクリーンモードONの場合 -> インタラクティブ待機
+            if not filename and self.config.get("start_screen_mode", False):
+                self.run_interactive_start_screen()
+            # 2. それ以外 (ファイル指定あり or モードOFF) -> 通常のスプラッシュ (時間指定)
+            else:
+                duration = self.config.get("splash_duration", 2000)
+                # ファイルなしでモードOFFなら待機、ファイルありなら一定時間
+                if not filename:
+                    self.show_start_screen(duration_ms=None, interactive=False)
+                else:
+                    self.show_start_screen(duration_ms=duration, interactive=False)
+
 
     def _get_color(self, color_name):
         return COLOR_MAP.get(color_name.upper(), -1)
@@ -691,8 +824,44 @@ class Editor:
         except curses.error:
             pass
 
-    # --- 変更点: duration_ms 引数を追加 ---
-    def show_start_screen(self, duration_ms=None):
+    def run_interactive_start_screen(self):
+        """インタラクティブなスタート画面ループ"""
+        while True:
+            self.height, self.width = self.stdscr.getmaxyx()
+            self.show_start_screen(duration_ms=None, interactive=True)
+            
+            try:
+                ch = self.stdscr.getch()
+            except KeyboardInterrupt:
+                break
+
+            if ch == CTRL_S:
+                # 設定ファイルを開く
+                setting_file = os.path.join(get_config_dir(), "setting.json")
+                # ロード処理
+                new_lines, err = self.load_file(setting_file)
+                if not err:
+                    self.buffer = Buffer(new_lines)
+                    self.filename = setting_file
+                    self.file_mtime = os.path.getmtime(setting_file)
+                    self.current_syntax_rules = self.detect_syntax(setting_file)
+                    self.cursor_y = 0
+                    self.cursor_x = 0
+                    self.col_offset = 0
+                    self.save_history(init=True)
+                    self.active_pane = 'editor'
+                else:
+                    self.set_status(err)
+                break
+            elif ch == CTRL_P:
+                # プラグインマネージャーへ遷移
+                self.active_pane = 'plugin_manager'
+                break 
+            elif ch != -1:
+                # 任意のキーでエディタへ
+                break
+
+    def show_start_screen(self, duration_ms=None, interactive=False):
         self.stdscr.clear()
         # Pair 3 is CYAN (Text)
         logo_attr = curses.color_pair(3) | curses.A_BOLD
@@ -718,13 +887,22 @@ class Editor:
                 
         self.safe_addstr(my + len(logo) + 1, max(0, mx - 12), f"CAFFEE Editor v{VERSION}", logo_attr)
         
-        if duration_ms:
-             self.stdscr.refresh()
-             curses.napms(duration_ms)
-        else:
+        # --- インタラクティブモードの場合の表示 ---
+        if interactive:
+            menu_y = my + len(logo) + 4
+            menu_text = "[^S] Settings      [^P] Plugin Manager      [Any Key] Empty Buffer"
+            self.safe_addstr(menu_y, max(0, mx - len(menu_text)//2), menu_text, curses.color_pair(3))
+        
+        # --- 通常のメッセージ ---
+        elif not duration_ms:
             self.safe_addstr(my + len(logo) + 3, max(0, mx - 15), "Press any key to brew...", curses.A_DIM | curses.color_pair(3))
-            self.stdscr.refresh()
-            self.stdscr.getch()
+        
+        self.stdscr.refresh()
+        
+        if duration_ms:
+             curses.napms(duration_ms)
+        elif not interactive:
+             self.stdscr.getch()
 
     def get_selection_range(self):
         if not self.mark_pos: return None
@@ -787,6 +965,15 @@ class Editor:
         return max(1, h)
 
     def draw_content(self):
+        # Plugin Manager Draw Handling
+        if self.active_pane == 'plugin_manager':
+            colors = {
+                "header": curses.color_pair(1),
+                "ui_border": curses.color_pair(10)
+            }
+            self.plugin_manager.draw(self.stdscr, self.height, self.width, colors)
+            return
+
         linenum_width = max(4, len(str(len(self.buffer)))) + 1
         edit_y, edit_x, edit_h, edit_w = self.get_edit_rect()
         
@@ -897,6 +1084,10 @@ class Editor:
             self.terminal.draw(self.stdscr, ty, tx, th, tw, colors)
 
     def draw_ui(self):
+        # Plugin Manager Mode doesn't use standard UI
+        if self.active_pane == 'plugin_manager':
+            return
+
         mark_status = "[MARK]" if self.mark_pos else ""
         mod_char = " *" if self.modified else ""
         syntax_name = "Text"
@@ -1348,6 +1539,8 @@ class Editor:
                 try: self.stdscr.move(ty + th - 1, tx + 2)
                 except curses.error: pass
                 curses.curs_set(1)
+            elif self.active_pane == 'plugin_manager':
+                curses.curs_set(0)
 
             try:
                 if self.show_terminal:
@@ -1386,6 +1579,20 @@ class Editor:
             elif key_code == CTRL_B:
                 self.run_build_command()
                 continue
+            
+            # --- Handle Plugin Manager Input ---
+            if self.active_pane == 'plugin_manager':
+                if key_code == curses.KEY_UP:
+                    self.plugin_manager.navigate(-1)
+                elif key_code == curses.KEY_DOWN:
+                    self.plugin_manager.navigate(1)
+                elif key_code in (KEY_ENTER, KEY_RETURN, ord(' ')):
+                    msg = self.plugin_manager.toggle_current()
+                    if msg: self.set_status(msg, timeout=4)
+                elif key_code == KEY_ESC:
+                    self.active_pane = 'editor'
+                continue
+            # -----------------------------------
 
             if self.active_pane == 'explorer':
                 if key_code == curses.KEY_UP:
