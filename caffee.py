@@ -982,7 +982,10 @@ class Editor:
             elif ch == CTRL_P:
                 # プラグインマネージャーへ遷移
                 self.active_pane = 'plugin_manager'
-                break 
+                break
+            elif ch == CTRL_F:
+                self.active_pane = 'full_screen_explorer'
+                break
             elif ch != -1:
                 # 任意のキーでエディタへ
                 break
@@ -1016,7 +1019,7 @@ class Editor:
         # --- インタラクティブモードの場合の表示 ---
         if interactive:
             menu_y = my + len(logo) + 4
-            menu_text = "[^S] Settings      [^P] Plugin Manager      [Any Key] Empty Buffer"
+            menu_text = "[^F] File Explorer [^S] Settings [^P] Plugins [Any Key] Empty Buffer"
             self.safe_addstr(menu_y, max(0, mx - len(menu_text)//2), menu_text, curses.color_pair(3))
         
         # --- 通常のメッセージ ---
@@ -1098,6 +1101,17 @@ class Editor:
                 "ui_border": curses.color_pair(10)
             }
             self.plugin_manager.draw(self.stdscr, self.height, self.width, colors)
+            return
+            
+        if self.active_pane == 'full_screen_explorer':
+            colors = {
+                "ui_border": curses.color_pair(10),
+                "header": curses.color_pair(1),
+                "dir": curses.color_pair(11),
+                "file": curses.color_pair(12)
+            }
+            # フルスクリーンなのでy=0, x=0, h=self.height-1, w=self.width
+            self.explorer.draw(self.stdscr, 1, 0, self.height - 2, self.width, colors)
             return
 
         linenum_width = max(4, len(str(len(self.buffer)))) + 1
@@ -1213,6 +1227,11 @@ class Editor:
         # Plugin Manager Mode doesn't use standard UI
         if self.active_pane == 'plugin_manager':
             return
+            
+        if self.active_pane == 'full_screen_explorer':
+            self.safe_addstr(0, 0, " CAFFEE File Explorer ".ljust(self.width), curses.color_pair(1) | curses.A_BOLD)
+            self.safe_addstr(self.height - 1, 0, " [Enter] Open  [Esc] Back to Editor ".ljust(self.width), curses.color_pair(1))
+            return
 
         # --- Tab Bar Drawing ---
         self.safe_addstr(0, 0, " " * self.width, curses.color_pair(10))
@@ -1235,7 +1254,7 @@ class Editor:
             ext_list = self.current_syntax_rules.get("extensions", [])
             if ext_list: syntax_name = ext_list[0].upper().replace(".", "")
 
-        focus_map = {'editor': 'EDT', 'explorer': 'EXP', 'terminal': 'TRM'}
+        focus_map = {'editor': 'EDT', 'explorer': 'EXP', 'terminal': 'TRM', 'full_screen_explorer': 'F-EXP'}
         focus_str = f"[{focus_map.get(self.active_pane, '---')}]"
 
         header = f" {EDITOR_NAME} v{VERSION} | {self.filename or 'New Buffer'} {mod_char} | {syntax_name} | {focus_str} {mark_status}"
@@ -1681,6 +1700,8 @@ class Editor:
                 curses.curs_set(1)
             elif self.active_pane == 'plugin_manager':
                 curses.curs_set(0)
+            elif self.active_pane == 'full_screen_explorer':
+                curses.curs_set(0)
 
             try:
                 if self.show_terminal:
@@ -1736,6 +1757,33 @@ class Editor:
                 elif key_code in (KEY_ENTER, KEY_RETURN, ord(' ')):
                     msg = self.plugin_manager.toggle_current()
                     if msg: self.set_status(msg, timeout=4)
+                elif key_code == KEY_ESC:
+                    self.active_pane = 'editor'
+                continue
+            
+            if self.active_pane == 'full_screen_explorer':
+                if key_code == curses.KEY_UP:
+                    self.explorer.navigate(-1)
+                elif key_code == curses.KEY_DOWN:
+                    self.explorer.navigate(1)
+                elif key_code in (KEY_ENTER, KEY_RETURN):
+                    res = self.explorer.enter()
+                    if res:
+                        new_lines, err = self.load_file(res)
+                        if not err:
+                            # 最初のタブの内容を更新
+                            self.tabs[0].buffer = Buffer(new_lines)
+                            self.tabs[0].filename = res
+                            self.tabs[0].file_mtime = os.path.getmtime(res)
+                            self.tabs[0].current_syntax_rules = self.detect_syntax(res)
+                            self.tabs[0].cursor_y = 0
+                            self.tabs[0].cursor_x = 0
+                            self.tabs[0].col_offset = 0
+                            self.tabs[0].save_history(init=True)
+                            self.active_tab_idx = 0
+                            self.active_pane = 'editor'
+                        else:
+                            self.set_status(err)
                 elif key_code == KEY_ESC:
                     self.active_pane = 'editor'
                 continue
