@@ -22,16 +22,16 @@ CTRL_E = 5
 CTRL_F = 6
 CTRL_G = 7
 CTRL_K = 11
-CTRL_L = 12
+CTRL_L = 12 # Next Tab
 CTRL_N = 14
 CTRL_O = 15
 CTRL_P = 16
 CTRL_R = 18
-CTRL_S = 19 # Edit Settings (Start Screen)
+CTRL_S = 19 # New Tab / Start Screen
 CTRL_T = 20
 CTRL_U = 21
 CTRL_W = 23
-CTRL_X = 24
+CTRL_X = 24 # Close Tab / Exit
 CTRL_Y = 25
 CTRL_Z = 26
 CTRL_MARK = 30
@@ -89,7 +89,11 @@ DEFAULT_CONFIG = {
         "ui_border": "WHITE",
         "explorer_dir": "WHITE",
         "explorer_file": "WHITE",
-        "terminal_bg": "DEFAULT"
+        "terminal_bg": "DEFAULT",
+        "tab_active_text": "WHITE",
+        "tab_active_bg": "BLUE",
+        "tab_inactive_text": "WHITE",
+        "tab_inactive_bg": "DEFAULT"
     }
 }
 
@@ -501,26 +505,51 @@ class Terminal:
                 stdscr.addstr(draw_line_y, x, line[:w], colors["bg"])
             except curses.error: pass
 
-class Editor:
-    def __init__(self, stdscr, filename=None, config=None, config_error=None):
-        self.stdscr = stdscr
+class EditorTab:
+    """単一の編集タブの状態を保持するクラス"""
+    def __init__(self, buffer, filename, syntax_rules, mtime):
+        self.buffer = buffer
         self.filename = filename
-        self.config = config if config else DEFAULT_CONFIG
-        
-        initial_lines, load_err = self.load_file(filename)
-        self.buffer = Buffer(initial_lines)
-        
-        # カーソル・表示関連
         self.cursor_y = 0
         self.cursor_x = 0
         self.scroll_offset = 0
-        self.col_offset = 0 # 横スクロール用のオフセット
+        self.col_offset = 0
         self.desired_x = 0
+        self.history = []
+        self.history_index = -1
+        self.modified = False
+        self.mark_pos = None
+        self.file_mtime = mtime
+        self.current_syntax_rules = syntax_rules
+
+class Editor:
+    def __init__(self, stdscr, filename=None, config=None, config_error=None):
+        self.stdscr = stdscr
+        self.config = config if config else DEFAULT_CONFIG
         
+        # タブ管理の初期化
+        self.tabs = []
+        self.active_tab_idx = 0
+        
+        # 最初のタブを作成
+        initial_lines, load_err = self.load_file(filename)
+        mtime = None
+        if filename and os.path.exists(filename):
+            try: mtime = os.path.getmtime(filename)
+            except OSError: pass
+        
+        rules = self.detect_syntax(filename)
+        first_tab = EditorTab(Buffer(initial_lines), filename, rules, mtime)
+        self.tabs.append(first_tab)
+        
+        # 最初のタブの履歴初期化
+        self.save_history(init=True)
+
         # レイアウト管理
         self.menu_height = 1
         self.status_height = 1
         self.header_height = 1
+        self.tab_bar_height = 1 # タブバー用
         
         # UIパネル状態管理
         self.show_explorer = self.config.get("show_explorer_default", False)
@@ -536,14 +565,7 @@ class Editor:
         
         self.status_message = ""
         self.status_expire_time = None
-        self.modified = False
         self.clipboard = []
-        
-        self.mark_pos = None
-        
-        self.history = []
-        self.history_index = -1
-        self.save_history(init=True)
         
         self.height, self.width = stdscr.getmaxyx()
         
@@ -551,16 +573,6 @@ class Editor:
         self.plugin_commands = {} 
 
         self.init_colors()
-        
-        self.current_syntax_rules = self.detect_syntax(filename)
-
-        self.file_mtime = None
-        if filename and os.path.exists(filename):
-            try: 
-                self.file_mtime = os.path.getmtime(filename)
-            except OSError: 
-                self.file_mtime = None
-
         self.load_plugins()
 
         if config_error:
@@ -584,6 +596,116 @@ class Editor:
                 else:
                     self.show_start_screen(duration_ms=duration, interactive=False)
 
+    # --- Properties to proxy current tab state ---
+    @property
+    def current_tab(self):
+        if not self.tabs:
+            # Fallback (should not happen in loop)
+            return EditorTab(Buffer([""]), None, None, None)
+        return self.tabs[self.active_tab_idx]
+
+    @property
+    def buffer(self): return self.current_tab.buffer
+    @buffer.setter
+    def buffer(self, val): self.current_tab.buffer = val
+
+    @property
+    def filename(self): return self.current_tab.filename
+    @filename.setter
+    def filename(self, val): self.current_tab.filename = val
+
+    @property
+    def cursor_y(self): return self.current_tab.cursor_y
+    @cursor_y.setter
+    def cursor_y(self, val): self.current_tab.cursor_y = val
+
+    @property
+    def cursor_x(self): return self.current_tab.cursor_x
+    @cursor_x.setter
+    def cursor_x(self, val): self.current_tab.cursor_x = val
+
+    @property
+    def scroll_offset(self): return self.current_tab.scroll_offset
+    @scroll_offset.setter
+    def scroll_offset(self, val): self.current_tab.scroll_offset = val
+
+    @property
+    def col_offset(self): return self.current_tab.col_offset
+    @col_offset.setter
+    def col_offset(self, val): self.current_tab.col_offset = val
+
+    @property
+    def desired_x(self): return self.current_tab.desired_x
+    @desired_x.setter
+    def desired_x(self, val): self.current_tab.desired_x = val
+
+    @property
+    def history(self): return self.current_tab.history
+    @history.setter
+    def history(self, val): self.current_tab.history = val
+
+    @property
+    def history_index(self): return self.current_tab.history_index
+    @history_index.setter
+    def history_index(self, val): self.current_tab.history_index = val
+
+    @property
+    def modified(self): return self.current_tab.modified
+    @modified.setter
+    def modified(self, val): self.current_tab.modified = val
+
+    @property
+    def mark_pos(self): return self.current_tab.mark_pos
+    @mark_pos.setter
+    def mark_pos(self, val): self.current_tab.mark_pos = val
+
+    @property
+    def file_mtime(self): return self.current_tab.file_mtime
+    @file_mtime.setter
+    def file_mtime(self, val): self.current_tab.file_mtime = val
+
+    @property
+    def current_syntax_rules(self): return self.current_tab.current_syntax_rules
+    @current_syntax_rules.setter
+    def current_syntax_rules(self, val): self.current_tab.current_syntax_rules = val
+    # ---------------------------------------------
+
+    def new_tab(self):
+        """Open a new empty tab and switch to it"""
+        new_tab = EditorTab(Buffer([""]), None, None, None)
+        self.tabs.append(new_tab)
+        self.active_tab_idx = len(self.tabs) - 1
+        self.save_history(init=True)
+        self.run_interactive_start_screen()
+
+    def close_current_tab(self):
+        """Close current tab. Returns True if exited editor entirely"""
+        if self.modified:
+            self.status_message = "Close tab: Save changes? (y/n/Esc)"
+            self.draw_ui()
+            while True:
+                try: ch = self.stdscr.getch()
+                except: ch = -1
+                if ch in (ord('y'), ord('Y')):
+                    self.save_file()
+                    break
+                elif ch in (ord('n'), ord('N')):
+                    break
+                elif ch == 27 or ch == CTRL_C:
+                    self.status_message = "Cancelled."
+                    return False
+        
+        self.tabs.pop(self.active_tab_idx)
+        if not self.tabs:
+            return True # No tabs left, exit
+        
+        if self.active_tab_idx >= len(self.tabs):
+            self.active_tab_idx = len(self.tabs) - 1
+        return False
+
+    def next_tab(self):
+        if not self.tabs: return
+        self.active_tab_idx = (self.active_tab_idx + 1) % len(self.tabs)
 
     def _get_color(self, color_name):
         return COLOR_MAP.get(color_name.upper(), -1)
@@ -597,7 +719,6 @@ class Editor:
                 
                 curses.init_pair(1, self._get_color(c["header_text"]), self._get_color(c["header_bg"]))
                 curses.init_pair(2, self._get_color(c["error_text"]), self._get_color(c["error_bg"]))
-                # Pair 3 is CYAN (used for linenums AND now logo)
                 curses.init_pair(3, self._get_color(c["linenum_text"]), self._get_color(c["linenum_bg"]))
                 curses.init_pair(4, self._get_color(c["selection_text"]), self._get_color(c["selection_bg"]))
                 
@@ -611,6 +732,11 @@ class Editor:
                 curses.init_pair(11, self._get_color(c.get("explorer_dir", "BLUE")), -1)
                 curses.init_pair(12, self._get_color(c.get("explorer_file", "WHITE")), -1)
                 curses.init_pair(13, curses.COLOR_WHITE, self._get_color(c.get("terminal_bg", "DEFAULT")))
+
+                # Tab Colors
+                curses.init_pair(14, self._get_color(c.get("tab_active_text", "WHITE")), self._get_color(c.get("tab_active_bg", "BLUE")))
+                curses.init_pair(15, self._get_color(c.get("tab_inactive_text", "WHITE")), self._get_color(c.get("tab_inactive_bg", "DEFAULT")))
+
 
             except curses.error:
                 pass
@@ -921,9 +1047,9 @@ class Editor:
         return start[0] < y < end[0]
 
     def get_edit_rect(self):
-        y = self.header_height
+        y = self.tab_bar_height + self.header_height
         x = 0
-        h = self.height - self.header_height - self.status_height - self.menu_height
+        h = self.height - self.tab_bar_height - self.header_height - self.status_height - self.menu_height
         w = self.width
         
         if self.show_terminal:
@@ -940,10 +1066,10 @@ class Editor:
         if not self.show_explorer: return 0,0,0,0
         _, _, edit_h, edit_w = self.get_edit_rect()
         
-        y = self.header_height
+        y = self.tab_bar_height + self.header_height
         w = min(self.explorer_width, self.width - 20)
         x = self.width - w
-        h = self.height - self.header_height - self.status_height - self.menu_height
+        h = self.height - self.tab_bar_height - self.header_height - self.status_height - self.menu_height
         if self.show_terminal:
             term_h = min(self.terminal_height, h - 5)
             h -= term_h
@@ -953,10 +1079,10 @@ class Editor:
     def get_terminal_rect(self):
         if not self.show_terminal: return 0,0,0,0
         _, _, edit_h, _ = self.get_edit_rect()
-        y = self.header_height + edit_h
+        y = self.tab_bar_height + self.header_height + edit_h
         x = 0
         w = self.width
-        total_h = self.height - self.header_height - self.status_height - self.menu_height
+        total_h = self.height - self.tab_bar_height - self.header_height - self.status_height - self.menu_height
         h = min(self.terminal_height, total_h - 5)
         return y, x, h, w
 
@@ -1088,6 +1214,20 @@ class Editor:
         if self.active_pane == 'plugin_manager':
             return
 
+        # --- Tab Bar Drawing ---
+        self.safe_addstr(0, 0, " " * self.width, curses.color_pair(10))
+        current_x = 0
+        for i, tab in enumerate(self.tabs):
+            name = os.path.basename(tab.filename) if tab.filename else "untitled"
+            mod = "*" if tab.modified else ""
+            display = f" {i+1}:{name}{mod} "
+            
+            pair = curses.color_pair(14) if i == self.active_tab_idx else curses.color_pair(15)
+            self.safe_addstr(0, current_x, display, pair)
+            current_x += len(display)
+            if current_x >= self.width: break
+        
+        # --- Header ---
         mark_status = "[MARK]" if self.mark_pos else ""
         mod_char = " *" if self.modified else ""
         syntax_name = "Text"
@@ -1100,11 +1240,11 @@ class Editor:
 
         header = f" {EDITOR_NAME} v{VERSION} | {self.filename or 'New Buffer'} {mod_char} | {syntax_name} | {focus_str} {mark_status}"
         header = header.ljust(self.width)
-        self.safe_addstr(0, 0, header, curses.color_pair(1) | curses.A_BOLD)
+        self.safe_addstr(1, 0, header, curses.color_pair(1) | curses.A_BOLD)
         self.header_height = 1
 
         shortcuts = [
-            ("^X", "Exit"), ("^C", "Copy"), ("^O", "Save"), ("^B", "Build"),
+            ("^X", "CloseTab"), ("^S", "New/Start"), ("^L", "NextTab"), ("^O", "Save"),
             ("^K", "Cut"), ("^U", "Paste"), ("^W", "Search"), ("^Z", "Undo"),
             ("^6", "Mark"), ("^A", "All"), ("^G", "Goto"), ("^Y", "DelLine"),
             ("^/", "Comment"), ("^F", "Explorer"), ("^T", "Terminal"), ("^E", "LineEnd")
@@ -1579,6 +1719,13 @@ class Editor:
             elif key_code == CTRL_B:
                 self.run_build_command()
                 continue
+            elif key_code == CTRL_S:
+                self.new_tab()
+                continue
+            elif key_code == CTRL_L:
+                self.next_tab()
+                continue
+
             
             # --- Handle Plugin Manager Input ---
             if self.active_pane == 'plugin_manager':
@@ -1649,21 +1796,9 @@ class Editor:
             if key_code == CTRL_C:
                 self.perform_copy()
             elif key_code == CTRL_X:
-                if self.modified:
-                    self.status_message = "Save changes? (y/n/Esc)"
-                    self.draw_ui()
-                    while True:
-                        try: ch = self.stdscr.getch()
-                        except: ch = -1
-                        if ch in (ord('y'), ord('Y')): 
-                            self.save_file()
-                            return
-                        elif ch in (ord('n'), ord('N')): 
-                            return
-                        elif ch == 27 or ch == CTRL_C: 
-                            self.status_message = "Cancelled."
-                            break
-                else: return
+                # Tab Close Logic
+                if self.close_current_tab():
+                    return
             elif key_code == CTRL_O: self.save_file()
             elif key_code == CTRL_W: self.search_text()
             elif key_code == CTRL_MARK:
