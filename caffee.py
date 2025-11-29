@@ -916,7 +916,7 @@ class Editor:
             ("^X", "Exit"), ("^C", "Copy"), ("^O", "Save"), ("^B", "Build"),
             ("^K", "Cut"), ("^U", "Paste"), ("^W", "Search"), ("^Z", "Undo"),
             ("^6", "Mark"), ("^A", "All"), ("^G", "Goto"), ("^Y", "DelLine"),
-            ("^/", "Comment"), ("^F", "Explorer"), ("^T", "Terminal")
+            ("^/", "Comment"), ("^F", "Explorer"), ("^T", "Terminal"), ("^E", "LineEnd")
         ]
 
         menu_lines = []
