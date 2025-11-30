@@ -2202,8 +2202,11 @@ def main(stdscr):
     fn = sys.argv[1] if len(sys.argv) > 1 else None
     Editor(stdscr, fn).main_loop()
 
-if __name__ == "__main__":
-    try: 
+def start_app():
+    try:
         curses.wrapper(main)
     except Exception as e:
         traceback.print_exc()
+
+if __name__ == "__main__":
+    start_app()
