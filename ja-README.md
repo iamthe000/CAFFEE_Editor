@@ -1,8 +1,9 @@
 # ☕ CAFFEE コマンドラインテキストエディタ
 
-<a href="README.md">🇬🇧 English README</a> | 
-<a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">公式UI日本語化プラグイン</a> | 
-<a href="Nuitka_Step.md">Nuitkaによる高速化手順</a>
+<a href="README.md">🇬🇧 English README</a>　
+<a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">公式UI日本語化プラグイン</a>　
+<a href="Nuitka_Step.md">Nuitkaによる高速化手順</a>　
+<a href="Setup_PATH.md">PATHのセットアップ方法</a>
 
 **CAFFEE**は、Pythonで書かれ、cursesライブラリを使用した軽量なターミナルテキストエディタです。シンプルで拡張性があり、効率的な編集体験を、最新のIDE風の機能と共にターミナル内で直接提供することを目指しています。
 
