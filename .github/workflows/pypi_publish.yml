@@ -1,0 +1,45 @@
+# .github/workflows/pypi_publish.yml
+
+name: Publish Python Package to PyPI
+
+on:
+  # Trigger the workflow when a semantic version tag (e.g., 1.0.0, 2.1.5) without 'v' is pushed
+  push:
+    tags:
+      # Catch all tags starting with digits (e.g., 1.0.0, 1.3.1)
+      - '[0-9]+.[0-9]+.[0-9]+*' 
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # environment: pypi # (Optional) Uncomment this if you are using a PyPI environment
+    
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 🐍 Set up Python environment
+        uses: actions/setup-python@v5
+        with:
+          # Match the Python version supported by your project
+          python-version: '3.x' 
+          
+      - name: 🏗️ Install build tools (build, twine)
+        # build: creates distribution files / twine: uploads to PyPI
+        run: pip install build twine
+
+      - name: 🧱 Build Source and Wheel distributions
+        # Creates .tar.gz and .whl files in the dist/ directory
+        run: python -m build
+        
+      - name: 📤 Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Use the PYPI_API_TOKEN registered in GitHub Secrets
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          # Username is fixed to "__token__" when using an API token
+          username: __token__
+          
+      - name: ✅ Check release tag (Optional)
+        # Output the executed tag to the log
+        run: echo "Successfully deployed tag ${{ github.ref_name }}"
