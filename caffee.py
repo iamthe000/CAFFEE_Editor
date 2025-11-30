@@ -2197,16 +2197,35 @@ class Editor:
                 self.modified = True
 
 def main(stdscr):
-    os.environ.setdefault('ESCDELAY', '25') 
+    os.environ.setdefault('ESCDELAY', '25')
     curses.raw()
     fn = sys.argv[1] if len(sys.argv) > 1 else None
-    Editor(stdscr, fn).main_loop()
+    try:
+        Editor(stdscr, fn).main_loop()
+    except Exception as e:
+        # Ensure curses is ended before printing
+        curses.endwin()
+        print(f"An unexpected error occurred: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
 
 def start_app():
+    term = os.environ.get("TERM", "")
+    if "ish" in term:
+        # Attempt to make iSH compatible by setting a common TERM value
+        os.environ['TERM'] = 'xterm'
+    elif "dumb" in term:
+        print("Caffee editor is not supported in 'dumb' terminal environments.", file=sys.stderr)
+        return
+
     try:
         curses.wrapper(main)
+    except curses.error as e:
+        print(f"Failed to start Caffee editor due to a curses error: {e}", file=sys.stderr)
+        print("Your terminal might not be fully compatible.", file=sys.stderr)
     except Exception as e:
-        traceback.print_exc()
+        # Fallback for other exceptions
+        print(f"An unexpected error occurred: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
 
 if __name__ == "__main__":
     start_app()
