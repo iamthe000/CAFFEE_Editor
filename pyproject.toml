@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 # [project] セクション: PyPIのメタデータ（ユーザーが見る情報）
 # ----------------------------------------------------------------------
 [project]
-name = "CAFFEE-Editor" # PyPIに登録するパッケージ名
+name = "caffee" # PyPIに登録するパッケージ名
 dynamic = ["version"]
 description = "A simple CUI editor for Caffee."
 readme = "README.md"
