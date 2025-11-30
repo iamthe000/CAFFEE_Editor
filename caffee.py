@@ -163,6 +163,17 @@ DEFAULT_SYNTAX_RULES = {
     }
 }
 
+DEFAULT_BUILD_COMMANDS = {
+    ".py": "python3 \"{filename}\"",
+    ".js": "node \"{filename}\"",
+    ".go": "go run \"{filename}\"",
+    ".c": "gcc \"{filename}\" -o \"{base}\" && \"./{base}\"",
+    ".cpp": "g++ \"{filename}\" -o \"{base}\" && \"./{base}\"",
+    ".cc": "g++ \"{filename}\" -o \"{base}\" && \"./{base}\"",
+    ".sh": "bash \"{filename}\"",
+    ".rs": "rustc \"{filename}\" && \"./{base}\""
+}
+
 
 def get_config_dir():
     """設定ディレクトリのパスを取得"""
@@ -656,6 +667,7 @@ class Editor:
         self.stdscr = stdscr
         self.config = DEFAULT_CONFIG.copy()
         self.syntax_rules = DEFAULT_SYNTAX_RULES.copy()
+        self.build_commands = DEFAULT_BUILD_COMMANDS.copy()
 
         # プラグインをロードして、カスタム設定とシンタックスを登録
         self.load_plugins()
@@ -967,6 +979,14 @@ class Editor:
     # ==========================================
     # --- Plugin API ---
     # ==========================================
+    def register_build_command(self, extension, command):
+        """プラグインから新しいビルドコマンドを登録する"""
+        if extension.startswith('.') and command:
+            self.build_commands[extension] = command
+            self.set_status(f"Build command for '{extension}' registered.", timeout=2)
+        else:
+            self.set_status(f"Invalid build command for '{extension}'.", timeout=4)
+            
     def get_cursor_position(self): return self.cursor_y, self.cursor_x
     def get_line_content(self, y): return self.buffer.lines[y] if 0 <= y < len(self.buffer) else ""
     def get_buffer_lines(self): return self.buffer.get_content()
@@ -1862,15 +1882,11 @@ class Editor:
             
         ext = os.path.splitext(self.filename)[1].lower()
         base = os.path.splitext(self.filename)[0]
-        
-        cmd = ""
-        if ext == ".py": cmd = f"python3 \"{self.filename}\""
-        elif ext == ".js": cmd = f"node \"{self.filename}\""
-        elif ext == ".go": cmd = f"go run \"{self.filename}\""
-        elif ext == ".c": cmd = f"gcc \"{self.filename}\" -o \"{base}\" && \"./{base}\""
-        elif ext in [".cpp", ".cc"]: cmd = f"g++ \"{self.filename}\" -o \"{base}\" && \"./{base}\""
-        elif ext == ".sh": cmd = f"bash \"{self.filename}\""
-        elif ext == ".rs": cmd = f"rustc \"{self.filename}\" && \"./{base}\""
+
+        cmd_template = self.build_commands.get(ext)
+
+        if cmd_template:
+            cmd = cmd_template.format(filename=self.filename, base=base)
         else:
             self.set_status(f"No build command defined for {ext}")
             return
