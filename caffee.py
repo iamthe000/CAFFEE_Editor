@@ -110,8 +110,8 @@ COLOR_MAP = {
     "DEFAULT": -1
 }
 
-# --- シンタックスハイライト定義 ---
-SYNTAX_RULES = {
+# --- デフォルトのシンタックスハイライト定義 ---
+DEFAULT_SYNTAX_RULES = {
     "python": {
         "extensions": [".py", ".pyw"],
         "keywords": r"\b(and|as|assert|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|not|or|pass|raise|return|try|while|with|yield|None|True|False|self)\b",
@@ -170,10 +170,10 @@ def get_config_dir():
     return os.path.join(home_dir, ".caffee_setting")
 
 def load_config():
-    """設定ファイルを読み込み、デフォルト設定とマージする"""
-    config = DEFAULT_CONFIG.copy()
+    """ユーザー設定ファイル(setting.json)を読み込む"""
     setting_dir = get_config_dir()
     setting_file = os.path.join(setting_dir, "setting.json")
+    user_config = {}
     load_error = None
 
     try:
@@ -185,15 +185,10 @@ def load_config():
         try:
             with open(setting_file, 'r', encoding='utf-8') as f:
                 user_config = json.load(f)
-                if "colors" in user_config and isinstance(user_config["colors"], dict):
-                    config["colors"].update(user_config["colors"])
-                    del user_config["colors"]
-                for key, value in user_config.items():
-                    config[key] = value
         except (json.JSONDecodeError, OSError) as e:
             load_error = f"Config load error: {e}"
             
-    return config, load_error
+    return user_config, load_error
 
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 def strip_ansi(text):
@@ -657,10 +652,20 @@ class EditorTab:
         self.current_syntax_rules = syntax_rules
 
 class Editor:
-    def __init__(self, stdscr, filename=None, config=None, config_error=None):
+    def __init__(self, stdscr, filename=None):
         self.stdscr = stdscr
-        self.config = config if config else DEFAULT_CONFIG
-        
+        self.config = DEFAULT_CONFIG.copy()
+        self.syntax_rules = DEFAULT_SYNTAX_RULES.copy()
+
+        # プラグインをロードして、カスタム設定とシンタックスを登録
+        self.load_plugins()
+
+        # ユーザー設定をロード（プラグイン設定を上書き可能）
+        user_config, config_error = load_config()
+        if "colors" in user_config and isinstance(user_config["colors"], dict):
+            self.config["colors"].update(user_config.pop("colors"))
+        self.config.update(user_config)
+
         # タブ管理の初期化
         self.tabs = []
         self.active_tab_idx = 0
@@ -708,7 +713,6 @@ class Editor:
         self.plugin_commands = {} 
 
         self.init_colors()
-        self.load_plugins()
 
         if config_error:
             self.set_status(config_error, timeout=5)
@@ -879,7 +883,7 @@ class Editor:
     def detect_syntax(self, filename):
         if not filename: return None
         _, ext = os.path.splitext(filename)
-        for lang, rules in SYNTAX_RULES.items():
+        for lang, rules in self.syntax_rules.items():
             if ext in rules["extensions"]:
                 return rules
         return None
@@ -946,6 +950,19 @@ class Editor:
 
     def bind_key(self, key_code, func):
         self.plugin_key_bindings[key_code] = func
+
+    def register_syntax_rule(self, lang_name, rule_dict):
+        """プラグインから新しいシンタックスルールを登録する"""
+        if lang_name and isinstance(rule_dict, dict) and "extensions" in rule_dict:
+            self.syntax_rules[lang_name] = rule_dict
+            self.set_status(f"Syntax for '{lang_name}' registered.", timeout=2)
+        else:
+            self.set_status(f"Invalid syntax rule for '{lang_name}'.", timeout=4)
+
+    def register_config(self, key, default_value):
+        """プラグインから新しい設定項目とデフォルト値を登録する"""
+        if key not in self.config:
+            self.config[key] = default_value
 
     # ==========================================
     # --- Plugin API ---
@@ -2167,8 +2184,7 @@ def main(stdscr):
     os.environ.setdefault('ESCDELAY', '25') 
     curses.raw()
     fn = sys.argv[1] if len(sys.argv) > 1 else None
-    config, config_error = load_config()
-    Editor(stdscr, fn, config, config_error).main_loop()
+    Editor(stdscr, fn).main_loop()
 
 if __name__ == "__main__":
     try: 
