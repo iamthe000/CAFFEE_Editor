@@ -33,7 +33,7 @@ Homepage = "https://github.com/iamthe000/CAFFEE_Editor"
 # コマンドラインエントリーポイントの定義
 # ユーザーが 'caffee' コマンドを実行したときに、
 # caffee パッケージ内の main.py ファイルの main() 関数が実行される
-caffee = "caffee:main"
+caffee = "caffee:start_app"
 
 [tool.hatch.version]
 path = "caffee.py"
