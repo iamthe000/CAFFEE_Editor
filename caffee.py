@@ -602,6 +602,8 @@ class Terminal:
                 if not data: return False
                 
                 text = data.decode('utf-8', errors='replace')
+                # iSH環境で発生するNULL文字(\x00)を除去
+                text = text.replace('\0', '')
                 text = strip_ansi(text)
                 
                 new_lines = text.replace('\r\n', '\n').split('\n')
