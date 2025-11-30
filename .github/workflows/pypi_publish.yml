@@ -12,6 +12,9 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      # Grant OIDC token permissions for trusted publishing
+      id-token: write
     # environment: pypi # (Optional) Uncomment this if you are using a PyPI environment
     
     steps:
@@ -24,21 +27,16 @@ jobs:
           # Match the Python version supported by your project
           python-version: '3.x' 
           
-      - name: 🏗️ Install build tools (build, twine)
-        # build: creates distribution files / twine: uploads to PyPI
-        run: pip install build twine
+      - name: 🏗️ Install build tools
+        # build: creates distribution files
+        run: pip install build
 
       - name: 🧱 Build Source and Wheel distributions
         # Creates .tar.gz and .whl files in the dist/ directory
         run: python -m build
         
-      - name: 📤 Publish package to PyPI
+      - name: 📤 Publish package to PyPI using trusted publisher
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          # Use the PYPI_API_TOKEN registered in GitHub Secrets
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          # Username is fixed to "__token__" when using an API token
-          username: __token__
           
       - name: ✅ Check release tag (Optional)
         # Output the executed tag to the log
