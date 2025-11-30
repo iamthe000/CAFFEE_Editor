@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 # ----------------------------------------------------------------------
 [project]
 name = "CAFFEE-Editor" # PyPIに登録するパッケージ名
-version = "2.0.2"
+dynamic = ["version"]
 description = "A simple CUI editor for Caffee."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -34,6 +34,9 @@ Homepage = "https://github.com/iamthe000/CAFFEE_Editor"
 # ユーザーが 'caffee' コマンドを実行したときに、
 # caffee パッケージ内の main.py ファイルの main() 関数が実行される
 caffee = "caffee:main"
+
+[tool.hatch.version]
+path = "caffee.py"
 
 [tool.hatch.build.targets.wheel]
 include = ["/caffee.py"]
