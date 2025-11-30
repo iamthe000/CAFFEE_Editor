@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "CAFFEE-Editor" # PyPIに登録するパッケージ名
+dynamic = ["version"]
+description = "A simple CUI editor for Caffee."
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT" # 必要に応じて変更
+authors = [
+    { name = "iamthe000", email = "your_email@example.com" },
+]
+keywords = ["cui", "editor", "cli"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+    "Development Status :: 5 - Production/Stable",
+]
+
+[project.urls]
+Homepage = "https://github.com/iamthe000/CAFFEE_Editor"
+
+[project.scripts]
+# CUIエディタを起動するためのコマンド名と、その実行関数を定義
+# 例: ユーザーが 'caffee' と打つと、caffee/main.py の main() 関数が実行される
+caffee = "caffee.main:main"
