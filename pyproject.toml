@@ -1,23 +1,28 @@
 [build-system]
+# パッケージのビルドに使用するバックエンドと依存関係
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# ----------------------------------------------------------------------
+# [project] セクション: PyPIのメタデータ（ユーザーが見る情報）
+# ----------------------------------------------------------------------
 [project]
 name = "CAFFEE-Editor" # PyPIに登録するパッケージ名
 dynamic = ["version"]
 description = "A simple CUI editor for Caffee."
 readme = "README.md"
 requires-python = ">=3.8"
-license = "MIT" # 必要に応じて変更
+license = { text = "MIT" } # ライセンスを明記
 authors = [
     { name = "iamthe000", email = "your_email@example.com" },
 ]
-keywords = ["cui", "editor", "cli"]
+keywords = ["cui", "editor", "cli", "terminal"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Environment :: Console",
+    "Topic :: Text Editors",
     "Development Status :: 5 - Production/Stable",
 ]
 
@@ -25,6 +30,17 @@ classifiers = [
 Homepage = "https://github.com/iamthe000/CAFFEE_Editor"
 
 [project.scripts]
-# CUIエディタを起動するためのコマンド名と、その実行関数を定義
-# 例: ユーザーが 'caffee' と打つと、caffee/main.py の main() 関数が実行される
+# コマンドラインエントリーポイントの定義
+# ユーザーが 'caffee' コマンドを実行したときに、
+# caffee パッケージ内の main.py ファイルの main() 関数が実行される
 caffee = "caffee.main:main"
+
+
+# ----------------------------------------------------------------------
+# [tool.hatch.version] セクション: ビルドツールのバージョン管理設定
+# ----------------------------------------------------------------------
+[tool.hatch.version]
+# バージョン情報の手法を指定（ここでは静的な値を直接定義）
+source = "static"
+# 現在の最新リリースバージョンを指定
+version = "2.0.2"
