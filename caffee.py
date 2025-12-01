@@ -473,25 +473,115 @@ class SettingsManager:
             except curses.error: pass
 
 
+def human_readable_size(size, decimal_places=1):
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if size < 1024.0:
+            break
+        size /= 1024.0
+    return f"{size:.{decimal_places}f}{unit}"
+
+
 class FileExplorer:
     def __init__(self, start_path="."):
         self.current_path = os.path.abspath(start_path)
         self.files = []
         self.selected_index = 0
         self.scroll_offset = 0
+
+        # --- 機能追加 ---
+        self.sort_by = "name" # "name", "mtime", "size"
+        self.sort_order = "asc" # "asc", "desc"
+        self.show_hidden = False
+        self.search_query = ""
+        # -----------------
+
+        self.refresh_list()
+
+    def cycle_sort_mode(self):
+        """ソート項目を切り替える"""
+        modes = ["name", "mtime", "size"]
+        try:
+            current_index = modes.index(self.sort_by)
+            self.sort_by = modes[(current_index + 1) % len(modes)]
+        except ValueError:
+            self.sort_by = "name"
+        self.refresh_list()
+        return f"Sorted by {self.sort_by}"
+
+    def toggle_sort_order(self):
+        """ソート順を昇順/降順で切り替える"""
+        self.sort_order = "desc" if self.sort_order == "asc" else "asc"
+        self.refresh_list()
+        return f"Order: {self.sort_order}"
+
+    def toggle_hidden(self):
+        """隠しファイルの表示を切り替える"""
+        self.show_hidden = not self.show_hidden
+        self.refresh_list()
+        return f"Show hidden: {self.show_hidden}"
+
+    def set_search_query(self, query):
+        """検索クエリを設定する"""
+        self.search_query = query if query is not None else ""
         self.refresh_list()
 
     def refresh_list(self):
         try:
             items = os.listdir(self.current_path)
-            dirs = sorted([f for f in items if os.path.isdir(os.path.join(self.current_path, f))])
-            files = sorted([f for f in items if not os.path.isdir(os.path.join(self.current_path, f))])
             
-            self.files = [".."] + dirs + files
-            self.selected_index = 0
-            self.scroll_offset = 0
+            # --- フィルタリング ---
+            if not self.show_hidden:
+                items = [f for f in items if not f.startswith('.')]
+            if self.search_query:
+                try:
+                    # 簡易的なワイルドカードをサポート
+                    query_re = re.compile(self.search_query.replace('*', '.*'), re.IGNORECASE)
+                    items = [f for f in items if query_re.search(f)]
+                except re.error:
+                    # 無効な正規表現の場合は検索しない
+                    pass
+
+            # --- ファイル情報取得 ---
+            file_details = []
+            for item in items:
+                try:
+                    path = os.path.join(self.current_path, item)
+                    stat = os.stat(path)
+                    is_dir = os.path.isdir(path)
+                    file_details.append({
+                        "name": item,
+                        "is_dir": is_dir,
+                        "mtime": stat.st_mtime,
+                        "size": stat.st_size
+                    })
+                except OSError:
+                    continue # アクセス権がないファイルなどはスキップ
+
+            # --- ソート ---
+            is_reverse = (self.sort_order == "desc")
+
+            # ソートキーを選択
+            if self.sort_by == "name":
+                sort_key_func = lambda f: f["name"].lower()
+            elif self.sort_by == "mtime":
+                sort_key_func = lambda f: f["mtime"]
+            elif self.sort_by == "size":
+                sort_key_func = lambda f: f["size"] if not f["is_dir"] else -1 # ディレクトリはサイズでソートされないように
+            else:
+                sort_key_func = lambda f: f["name"].lower()
+
+            # (is_dir, sort_key)のタプルでソート。not f['is_dir'] はディレクトリでTrue
+            sorted_items = sorted(file_details, key=lambda f: (not f['is_dir'], sort_key_func(f)), reverse=is_reverse)
+
+
+            # self.filesの構造を詳細辞書に変更
+            self.files = [{"name": "..", "is_dir": True, "mtime": 0, "size": 0}] + sorted_items
+
+            if self.selected_index >= len(self.files):
+                self.selected_index = max(0, len(self.files) - 1)
+
         except OSError:
-            self.files = [".."]
+            self.files = [{"name": "..", "is_dir": True, "mtime": 0, "size": 0}]
 
     def navigate(self, delta):
         self.selected_index += delta
@@ -501,32 +591,55 @@ class FileExplorer:
     def enter(self):
         if not self.files: return None
         
-        selected = self.files[self.selected_index]
-        target = os.path.abspath(os.path.join(self.current_path, selected))
+        selected_item = self.files[self.selected_index]
+        selected_name = selected_item["name"]
+        target = os.path.abspath(os.path.join(self.current_path, selected_name))
         
-        if os.path.isdir(target):
+        if selected_item["is_dir"]:
             self.current_path = target
+            self.search_query = "" # ディレクトリ移動時に検索をリセット
             self.refresh_list()
             return None
         else:
             return target
 
     def draw(self, stdscr, y, x, h, w, colors):
-        # 枠線の描画
-        for i in range(h):
-            try:
-                stdscr.addstr(y + i, x, " " * w, colors["ui_border"])
-                stdscr.addch(y + i, x + w - 1, '│', colors["ui_border"])
-            except curses.error: pass
-            
-        title = f" {os.path.basename(self.current_path)}/ "
-        if len(title) > w - 2: title = title[:w-2]
+        # --- 1. ヘッダー情報の準備 ---
+        path_str = self.current_path
+        if len(path_str) > w - 4:
+            path_str = "..." + path_str[-(w - 7):]
+
+        dirs_count = sum(1 for f in self.files if f["is_dir"] and f["name"] != "..")
+        files_count = len(self.files) - dirs_count - 1 # -1 for ".."
+
+        sort_indicator = f"{self.sort_by.capitalize()}({self.sort_order})"
+        header_l = f" {path_str} [{dirs_count}D/{files_count}F] "
+        header_r = f" {sort_indicator} "
+
+        search_info = f" Query: {self.search_query}" if self.search_query else ""
+
+        # --- 2. 描画開始 ---
         try:
-            stdscr.addstr(y, x, title, colors["header"] | curses.A_BOLD)
-            stdscr.addstr(y + 1, x, "─" * (w-1), colors["ui_border"])
+            # 枠線
+            stdscr.attron(colors["ui_border"])
+            for i in range(h):
+                stdscr.addstr(y + i, x, " " * w)
+                stdscr.addch(y + i, x + w - 1, '│')
+            stdscr.attroff(colors["ui_border"])
+
+            # 上部ヘッダー
+            stdscr.addstr(y, x, header_l.ljust(w), colors["header"] | curses.A_BOLD)
+            stdscr.addstr(y, x + w - len(header_r) - 1, header_r, colors["header"] | curses.A_BOLD)
+
+            # 検索情報と区切り線
+            stdscr.addstr(y + 1, x, ("─" * (w-1))[:w-1], colors["ui_border"])
+            if search_info:
+                stdscr.addstr(y + 1, x + 2, search_info, colors["header"])
+
         except curses.error: pass
 
-        list_h = h - 2 # Title + separator
+        # --- 3. ファイルリストの描画 ---
+        list_h = h - 4 # Header, separator, footer
         list_start_y = y + 2
         
         if self.selected_index < self.scroll_offset:
@@ -539,22 +652,63 @@ class FileExplorer:
             if idx >= len(self.files): break
             
             draw_y = list_start_y + i
-            f_name = self.files[idx]
+            item = self.files[idx]
+            f_name = item["name"]
+            is_dir = item["is_dir"]
             
-            is_dir = os.path.isdir(os.path.join(self.current_path, f_name))
-            color = colors["dir"] if is_dir else colors["file"]
-            attr = color
-            
-            prefix = "📁 " if is_dir else "📄 "
-            if f_name == "..": prefix = "⬆️  "
-
+            attr = colors["dir"] if is_dir else colors["file"]
             if idx == self.selected_index:
-                attr = attr | curses.A_REVERSE
+                attr |= curses.A_REVERSE
 
-            display_name = (prefix + f_name)[:w-3]
+            prefix = "📁" if is_dir else "📄"
+            if f_name == "..": prefix = "⬆️"
+
+            # --- 各列の情報を準備 ---
+            name_col = f" {prefix} {f_name}"
+            mtime_col = ""
+            size_col = ""
+
+            if f_name != "..":
+                try:
+                    mtime_dt = datetime.datetime.fromtimestamp(item["mtime"])
+                    mtime_col = mtime_dt.strftime("%Y-%m-%d %H:%M")
+                except:
+                    mtime_col = " " * 16
+
+                if not is_dir:
+                    size_col = human_readable_size(item["size"])
+
+            # --- 画面幅に応じて表示を調整 ---
+            size_w = 8
+            mtime_w = 17
+
+            available_w = w - 3 # margins
+            name_w = available_w
+            if available_w > mtime_w:
+                name_w -= mtime_w
+            if available_w > mtime_w + size_w:
+                name_w -= size_w
+            
+            # 切り詰め
+            if len(name_col) > name_w: name_col = name_col[:name_w-1] + "…"
+
+            display_str = name_col.ljust(name_w)
+            if available_w > mtime_w:
+                display_str += mtime_col.rjust(mtime_w)
+            if available_w > mtime_w + size_w:
+                 display_str += size_col.rjust(size_w)
+
             try:
-                stdscr.addstr(draw_y, x + 1, display_name.ljust(w-2), attr)
+                stdscr.addstr(draw_y, x + 1, display_str, attr)
             except curses.error: pass
+
+        # --- 4. フッター (Help) ---
+        try:
+            footer_y = y + h - 1
+            stdscr.addstr(footer_y, x, "─" * (w-1), colors["ui_border"])
+            help_text = " [s]Sort [o]Order [h]Hidden [/]Search [Ent]Open "
+            stdscr.addstr(footer_y, x + 2, help_text[:w-3], colors["header"])
+        except curses.error: pass
 
 
 class Terminal:
@@ -1481,8 +1635,7 @@ class Editor:
             return
             
         if self.active_pane == 'full_screen_explorer':
-            self.safe_addstr(0, 0, " CAFFEE File Explorer ".ljust(self.width), curses.color_pair(1) | curses.A_BOLD)
-            self.safe_addstr(self.height - 1, 0, " [Enter] Open  [Esc] Back to Editor ".ljust(self.width), curses.color_pair(1))
+            # This pane now uses the explorer's own draw method which includes headers/footers
             return
 
         # --- Tab Bar Drawing ---
@@ -2067,6 +2220,18 @@ class Editor:
                             self.active_pane = 'editor'
                         else:
                             self.set_status(err)
+                elif key_code == ord('s'):
+                    msg = self.explorer.cycle_sort_mode()
+                    self.set_status(msg, timeout=2)
+                elif key_code == ord('o'):
+                    msg = self.explorer.toggle_sort_order()
+                    self.set_status(msg, timeout=2)
+                elif key_code == ord('h'):
+                    msg = self.explorer.toggle_hidden()
+                    self.set_status(msg, timeout=2)
+                elif key_code == ord('/'):
+                    query = self.prompt_user(f"Search in {os.path.basename(self.explorer.current_path)}/: ", self.explorer.search_query)
+                    self.explorer.set_search_query(query)
                 elif key_code == KEY_ESC:
                     self.active_pane = 'editor'
                 continue
@@ -2093,6 +2258,18 @@ class Editor:
                             self.active_pane = 'editor'
                         else:
                             self.set_status(err)
+                elif key_code == ord('s'):
+                    msg = self.explorer.cycle_sort_mode()
+                    self.set_status(msg, timeout=2)
+                elif key_code == ord('o'):
+                    msg = self.explorer.toggle_sort_order()
+                    self.set_status(msg, timeout=2)
+                elif key_code == ord('h'):
+                    msg = self.explorer.toggle_hidden()
+                    self.set_status(msg, timeout=2)
+                elif key_code == ord('/'):
+                    query = self.prompt_user(f"Search in {os.path.basename(self.explorer.current_path)}/: ", self.explorer.search_query)
+                    self.explorer.set_search_query(query)
                 elif key_code == KEY_ESC:
                     self.active_pane = 'editor'
                 continue
