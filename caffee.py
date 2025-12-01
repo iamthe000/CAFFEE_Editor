@@ -783,7 +783,7 @@ class FileExplorer:
         try:
             footer_y = y + h - 1
             stdscr.addstr(footer_y, x, "─" * (w-1), colors["ui_border"])
-            help_text = " [Ent]Open [a]Add [d]Del [r]Rename [s]Sort [/]Search "
+            help_text = " [a/d/r]File [s/o]Sort [h]Hid [/]Srch [Ent]Open "
             stdscr.addstr(footer_y, x + 2, help_text[:w-3], colors["header"])
         except curses.error: pass
 
@@ -1368,13 +1368,20 @@ class Editor:
                 self.set_status("")
                 return False
 
-    def _process_explorer_input(self, key_code):
+    def _process_explorer_input(self, key_code, char_input):
         """Handles key presses when the file explorer is active."""
-        if key_code == curses.KEY_UP:
+        cmd_key = key_code
+        if cmd_key == -1 and char_input:
+            try:
+                cmd_key = ord(char_input)
+            except TypeError:
+                return
+
+        if cmd_key == curses.KEY_UP:
             self.explorer.navigate(-1)
-        elif key_code == curses.KEY_DOWN:
+        elif cmd_key == curses.KEY_DOWN:
             self.explorer.navigate(1)
-        elif key_code in (KEY_ENTER, KEY_RETURN):
+        elif cmd_key in (KEY_ENTER, KEY_RETURN):
             res = self.explorer.enter()
             if res:
                 new_lines, err = self.load_file(res)
@@ -1391,28 +1398,28 @@ class Editor:
                     self.active_pane = 'editor'
                 else:
                     self.set_status(err)
-        elif key_code == ord('s'):
+        elif cmd_key == ord('s'):
             msg = self.explorer.cycle_sort_mode()
             self.set_status(msg, timeout=2)
-        elif key_code == ord('o'):
+        elif cmd_key == ord('o'):
             msg = self.explorer.toggle_sort_order()
             self.set_status(msg, timeout=2)
-        elif key_code == ord('h'):
+        elif cmd_key == ord('h'):
             msg = self.explorer.toggle_hidden()
             self.set_status(msg, timeout=2)
-        elif key_code == ord('/'):
+        elif cmd_key == ord('/'):
             query = self._prompt_for_input(f"Search in {os.path.basename(self.explorer.current_path)}/: ", self.explorer.search_query)
             self.explorer.set_search_query(query)
-        elif key_code == ord('a'):
+        elif cmd_key == ord('a'):
             msg = self.explorer.prompt_for_creation()
             if msg: self.set_status(msg, timeout=3)
-        elif key_code == ord('d'):
+        elif cmd_key == ord('d'):
             msg = self.explorer.delete_selected()
             if msg: self.set_status(msg, timeout=3)
-        elif key_code == ord('r'):
+        elif cmd_key == ord('r'):
             msg = self.explorer.rename_selected()
             if msg: self.set_status(msg, timeout=3)
-        elif key_code == KEY_ESC:
+        elif cmd_key == KEY_ESC:
             self.active_pane = 'editor'
     # ==========================================
 
@@ -2374,12 +2381,12 @@ class Editor:
                 continue
             
             if self.active_pane == 'full_screen_explorer':
-                self._process_explorer_input(key_code)
+                self._process_explorer_input(key_code, char_input)
                 continue
             # -----------------------------------
 
             if self.active_pane == 'explorer':
-                self._process_explorer_input(key_code)
+                self._process_explorer_input(key_code, char_input)
                 continue
 
             if self.active_pane == 'terminal':
