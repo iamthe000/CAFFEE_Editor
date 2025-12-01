@@ -482,7 +482,8 @@ def human_readable_size(size, decimal_places=1):
 
 
 class FileExplorer:
-    def __init__(self, start_path="."):
+    def __init__(self, editor, start_path="."):
+        self.editor = editor
         self.current_path = os.path.abspath(start_path)
         self.files = []
         self.selected_index = 0
@@ -603,6 +604,82 @@ class FileExplorer:
         else:
             return target
 
+    def prompt_for_creation(self):
+        """ファイルまたはディレクトリの作成をユーザーに促す"""
+        name = self.editor._prompt_for_input("Create (file or dir/): ")
+        if not name:
+            return "Creation cancelled."
+
+        target_path = os.path.join(self.current_path, name)
+
+        try:
+            if name.endswith('/'):
+                os.makedirs(target_path)
+                msg = f"Directory '{name}' created."
+            else:
+                with open(target_path, 'w') as f: pass
+                msg = f"File '{name}' created."
+
+            self.refresh_list()
+            return msg
+        except OSError as e:
+            return f"Error: {e}"
+
+    def delete_selected(self):
+        """選択中のファイルまたはディレクトリを削除する"""
+        if not self.files or self.selected_index == 0:
+            return "Cannot delete parent directory."
+
+        item = self.files[self.selected_index]
+        name = item["name"]
+
+        if not self.editor._prompt_for_confirmation(f"Delete '{name}'? (y/n)"):
+             return "Deletion cancelled."
+
+        target_path = os.path.join(self.current_path, name)
+        try:
+            if item["is_dir"]:
+                shutil.rmtree(target_path)
+            else:
+                os.remove(target_path)
+
+            self.refresh_list()
+            # Adjust selection to not go out of bounds
+            if self.selected_index >= len(self.files):
+                self.selected_index = len(self.files) - 1
+
+            return f"Deleted '{name}'."
+        except OSError as e:
+            return f"Error: {e}"
+
+    def rename_selected(self):
+        """選択中のファイルまたはディレクトリの名前を変更する"""
+        if not self.files or self.selected_index == 0:
+            return "Cannot rename parent directory."
+
+        item = self.files[self.selected_index]
+        old_name = item["name"]
+
+        new_name = self.editor._prompt_for_input(f"Rename '{old_name}' to: ", default_text=old_name)
+
+        if not new_name or new_name == old_name:
+            return "Rename cancelled."
+
+        old_path = os.path.join(self.current_path, old_name)
+        new_path = os.path.join(self.current_path, new_name)
+
+        try:
+            os.rename(old_path, new_path)
+            self.refresh_list()
+            # Try to re-select the renamed item
+            for i, f in enumerate(self.files):
+                if f["name"] == new_name:
+                    self.selected_index = i
+                    break
+            return f"Renamed to '{new_name}'."
+        except OSError as e:
+            return f"Error: {e}"
+
     def draw(self, stdscr, y, x, h, w, colors):
         # --- 1. ヘッダー情報の準備 ---
         path_str = self.current_path
@@ -706,7 +783,7 @@ class FileExplorer:
         try:
             footer_y = y + h - 1
             stdscr.addstr(footer_y, x, "─" * (w-1), colors["ui_border"])
-            help_text = " [s]Sort [o]Order [h]Hidden [/]Search [Ent]Open "
+            help_text = " [Ent]Open [a]Add [d]Del [r]Rename [s]Sort [/]Search "
             stdscr.addstr(footer_y, x + 2, help_text[:w-3], colors["header"])
         except curses.error: pass
 
@@ -866,7 +943,7 @@ class Editor:
         
         self.active_pane = 'editor' 
         
-        self.explorer = FileExplorer(".")
+        self.explorer = FileExplorer(self, ".")
         self.terminal = Terminal(self.terminal_height)
         self.plugin_manager = PluginManager(get_config_dir())
         self.settings_manager = SettingsManager(self.config)
@@ -1235,6 +1312,108 @@ class Editor:
             self.status_message = ""
             self.redraw_screen()
         return result
+
+    def _prompt_for_input(self, prompt_msg, default_text=""):
+        """Draws a prompt on the status bar and waits for user text input."""
+        buffer = default_text
+        cursor_char = "_"
+
+        while True:
+            self.set_status(f"{prompt_msg}{buffer}{cursor_char}", timeout=None)
+            self.draw_ui()
+            self.stdscr.refresh()
+
+            try:
+                key_in = self.stdscr.get_wch()
+            except (curses.error, KeyboardInterrupt):
+                continue
+
+            key_code = -1
+            char_input = None
+
+            if isinstance(key_in, int):
+                key_code = key_in
+            elif isinstance(key_in, str) and len(key_in) == 1:
+                code = ord(key_in)
+                if code < 32 or code == 127: key_code = code
+                else: char_input = key_in
+
+            if key_code in (KEY_ENTER, KEY_RETURN):
+                self.set_status("")
+                return buffer
+            elif key_code == KEY_ESC or key_code == CTRL_C:
+                self.set_status("")
+                return None # Cancelled
+            elif key_code in (KEY_BACKSPACE, KEY_BACKSPACE2):
+                buffer = buffer[:-1]
+            elif char_input:
+                buffer += char_input
+
+    def _prompt_for_confirmation(self, prompt_msg):
+        """Displays a confirmation prompt and waits for 'y' or 'n'."""
+        self.set_status(prompt_msg, timeout=None)
+        self.draw_ui()
+        self.stdscr.refresh()
+
+        while True:
+            try:
+                ch = self.stdscr.getch()
+                if ch in (ord('y'), ord('Y')):
+                    self.set_status("")
+                    return True
+                elif ch in (ord('n'), ord('N'), KEY_ESC, CTRL_C):
+                    self.set_status("")
+                    return False
+            except (curses.error, KeyboardInterrupt):
+                self.set_status("")
+                return False
+
+    def _process_explorer_input(self, key_code):
+        """Handles key presses when the file explorer is active."""
+        if key_code == curses.KEY_UP:
+            self.explorer.navigate(-1)
+        elif key_code == curses.KEY_DOWN:
+            self.explorer.navigate(1)
+        elif key_code in (KEY_ENTER, KEY_RETURN):
+            res = self.explorer.enter()
+            if res:
+                new_lines, err = self.load_file(res)
+                if not err:
+                    self.buffer = Buffer(new_lines)
+                    self.filename = res
+                    try:
+                        self.file_mtime = os.path.getmtime(res)
+                    except OSError:
+                        self.file_mtime = None
+                    self.current_syntax_rules = self.detect_syntax(res)
+                    self.cursor_y, self.cursor_x, self.col_offset = 0, 0, 0
+                    self.save_history(init=True)
+                    self.active_pane = 'editor'
+                else:
+                    self.set_status(err)
+        elif key_code == ord('s'):
+            msg = self.explorer.cycle_sort_mode()
+            self.set_status(msg, timeout=2)
+        elif key_code == ord('o'):
+            msg = self.explorer.toggle_sort_order()
+            self.set_status(msg, timeout=2)
+        elif key_code == ord('h'):
+            msg = self.explorer.toggle_hidden()
+            self.set_status(msg, timeout=2)
+        elif key_code == ord('/'):
+            query = self._prompt_for_input(f"Search in {os.path.basename(self.explorer.current_path)}/: ", self.explorer.search_query)
+            self.explorer.set_search_query(query)
+        elif key_code == ord('a'):
+            msg = self.explorer.prompt_for_creation()
+            if msg: self.set_status(msg, timeout=3)
+        elif key_code == ord('d'):
+            msg = self.explorer.delete_selected()
+            if msg: self.set_status(msg, timeout=3)
+        elif key_code == ord('r'):
+            msg = self.explorer.rename_selected()
+            if msg: self.set_status(msg, timeout=3)
+        elif key_code == KEY_ESC:
+            self.active_pane = 'editor'
     # ==========================================
 
     def insert_text(self, text):
@@ -2187,8 +2366,7 @@ class Editor:
                         res = self.settings_manager.save_settings()
                         self.set_status(res, timeout=3)
                         # Ask to reload
-                        reload_choice = self.prompt_user("Reload config to apply changes now? (y/n)", default_value="y")
-                        if reload_choice and reload_choice.lower() == 'y':
+                        if self._prompt_for_confirmation("Reload config to apply changes now? (y/n)"):
                             self.reload_config()
 
                     elif key_code == KEY_ESC:
@@ -2196,82 +2374,12 @@ class Editor:
                 continue
             
             if self.active_pane == 'full_screen_explorer':
-                if key_code == curses.KEY_UP:
-                    self.explorer.navigate(-1)
-                elif key_code == curses.KEY_DOWN:
-                    self.explorer.navigate(1)
-                elif key_code in (KEY_ENTER, KEY_RETURN):
-                    res = self.explorer.enter()
-                    if res:
-                        new_lines, err = self.load_file(res)
-                        if not err:
-                            # アクティブなタブの内容を更新
-                            self.buffer = Buffer(new_lines)
-                            self.filename = res
-                            try:
-                                self.file_mtime = os.path.getmtime(res)
-                            except OSError:
-                                self.file_mtime = None
-                            self.current_syntax_rules = self.detect_syntax(res)
-                            self.cursor_y = 0
-                            self.cursor_x = 0
-                            self.col_offset = 0
-                            self.save_history(init=True)
-                            self.active_pane = 'editor'
-                        else:
-                            self.set_status(err)
-                elif key_code == ord('s'):
-                    msg = self.explorer.cycle_sort_mode()
-                    self.set_status(msg, timeout=2)
-                elif key_code == ord('o'):
-                    msg = self.explorer.toggle_sort_order()
-                    self.set_status(msg, timeout=2)
-                elif key_code == ord('h'):
-                    msg = self.explorer.toggle_hidden()
-                    self.set_status(msg, timeout=2)
-                elif key_code == ord('/'):
-                    query = self.prompt_user(f"Search in {os.path.basename(self.explorer.current_path)}/: ", self.explorer.search_query)
-                    self.explorer.set_search_query(query)
-                elif key_code == KEY_ESC:
-                    self.active_pane = 'editor'
+                self._process_explorer_input(key_code)
                 continue
             # -----------------------------------
 
             if self.active_pane == 'explorer':
-                if key_code == curses.KEY_UP:
-                    self.explorer.navigate(-1)
-                elif key_code == curses.KEY_DOWN:
-                    self.explorer.navigate(1)
-                elif key_code in (KEY_ENTER, KEY_RETURN):
-                    res = self.explorer.enter()
-                    if res:
-                        new_lines, err = self.load_file(res)
-                        if not err:
-                            self.buffer = Buffer(new_lines)
-                            self.filename = res
-                            self.file_mtime = os.path.getmtime(res)
-                            self.current_syntax_rules = self.detect_syntax(res)
-                            self.cursor_y = 0
-                            self.cursor_x = 0
-                            self.col_offset = 0
-                            self.save_history(init=True)
-                            self.active_pane = 'editor'
-                        else:
-                            self.set_status(err)
-                elif key_code == ord('s'):
-                    msg = self.explorer.cycle_sort_mode()
-                    self.set_status(msg, timeout=2)
-                elif key_code == ord('o'):
-                    msg = self.explorer.toggle_sort_order()
-                    self.set_status(msg, timeout=2)
-                elif key_code == ord('h'):
-                    msg = self.explorer.toggle_hidden()
-                    self.set_status(msg, timeout=2)
-                elif key_code == ord('/'):
-                    query = self.prompt_user(f"Search in {os.path.basename(self.explorer.current_path)}/: ", self.explorer.search_query)
-                    self.explorer.set_search_query(query)
-                elif key_code == KEY_ESC:
-                    self.active_pane = 'editor'
+                self._process_explorer_input(key_code)
                 continue
 
             if self.active_pane == 'terminal':
