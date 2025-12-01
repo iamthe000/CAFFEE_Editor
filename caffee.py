@@ -65,7 +65,7 @@ DEFAULT_CONFIG = {
     "start_screen_mode": True,  # 起動時にスタート画面(インタラクティブ)を有効にするか
     # --------------------------
     # --- UI Layout Settings ---
-    "explorer_width": 35,
+    "explorer_width": 50,
     "terminal_height": 10,
     "show_explorer_default": True,
     "show_terminal_default": True,
