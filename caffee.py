@@ -52,7 +52,7 @@ except ImportError:
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 DEFAULT_CONFIG = {
     "tab_width": 4,
     "history_limit": 50,
@@ -69,6 +69,13 @@ DEFAULT_CONFIG = {
     "terminal_height": 10,
     "show_explorer_default": True,
     "show_terminal_default": True,
+    # --------------------------
+    # --- Keybinding Display ---
+    "displayed_keybindings": [
+        "close_tab", "new_start", "next_tab", "save", "cut", "paste", "search", 
+        "undo", "redo", "copy", "build", "mark", "select_all", "goto", 
+        "delete_line", "comment", "explorer", "terminal", "line_end"
+    ],
     # --------------------------
     "colors": {
         "header_text": "BLACK",
@@ -108,6 +115,29 @@ COLOR_MAP = {
     "WHITE": curses.COLOR_WHITE,
     "YELLOW": curses.COLOR_YELLOW,
     "DEFAULT": -1
+}
+
+# --- デフォルトのキーバインディング定義 ---
+DEFAULT_KEYBINDINGS = {
+    "close_tab": {"key": "^X", "label": "CloseTab"},
+    "new_start": {"key": "^S", "label": "New/Start"},
+    "next_tab": {"key": "^L", "label": "NextTab"},
+    "save": {"key": "^O", "label": "Save"},
+    "cut": {"key": "^K", "label": "Cut"},
+    "paste": {"key": "^U", "label": "Paste"},
+    "search": {"key": "^W", "label": "Search"},
+    "undo": {"key": "^Z", "label": "Undo"},
+    "redo": {"key": "^R", "label": "Redo"},
+    "copy": {"key": "^C", "label": "Copy"},
+    "build": {"key": "^B", "label": "Build"},
+    "mark": {"key": "^6", "label": "Mark"},
+    "select_all": {"key": "^A", "label": "All"},
+    "goto": {"key": "^G", "label": "Goto"},
+    "delete_line": {"key": "^Y", "label": "DelLine"},
+    "comment": {"key": "^/", "label": "Comment"},
+    "explorer": {"key": "^F", "label": "Explorer"},
+    "terminal": {"key": "^T", "label": "Terminal"},
+    "line_end": {"key": "^E", "label": "LineEnd"},
 }
 
 # --- デフォルトのシンタックスハイライト定義 ---
@@ -340,6 +370,95 @@ class PluginManager:
             except curses.error: pass
 
 
+class KeybindingSettingsManager:
+    """フッターに表示するキーバインディングを対話的に編集するクラス"""
+    def __init__(self, editor):
+        self.editor = editor
+        self.config = editor.config
+        self.items = []
+        self.selected_index = 0
+        self.scroll_offset = 0
+        self.refresh_list()
+
+    def refresh_list(self):
+        self.items = []
+        displayed = self.config.get("displayed_keybindings", [])
+        
+        # DEFAULT_KEYBINDINGS のキーの順序を保持するために sorted を使う
+        for key_id in sorted(DEFAULT_KEYBINDINGS.keys()):
+            binding = DEFAULT_KEYBINDINGS[key_id]
+            self.items.append({
+                "id": key_id,
+                "key": binding["key"],
+                "label": binding["label"],
+                "enabled": key_id in displayed
+            })
+
+    def navigate(self, delta):
+        if not self.items: return
+        self.selected_index += delta
+        if self.selected_index < 0: self.selected_index = 0
+        if self.selected_index >= len(self.items): self.selected_index = len(self.items) - 1
+
+    def toggle_current(self):
+        if not self.items: return None
+        
+        item = self.items[self.selected_index]
+        item["enabled"] = not item["enabled"]
+        
+        # Update the config list
+        displayed_list = self.config.get("displayed_keybindings", [])
+        if item["enabled"]:
+            if item["id"] not in displayed_list:
+                displayed_list.append(item["id"])
+        else:
+            if item["id"] in displayed_list:
+                displayed_list.remove(item["id"])
+        
+        # Ensure the list in config is updated
+        self.config["displayed_keybindings"] = displayed_list
+        
+        return "Changed. Press ^O in Settings to save."
+
+    def draw(self, stdscr, height, width, colors):
+        stdscr.erase()
+        
+        # Header
+        header = " Keybinding Display Settings "
+        try:
+            stdscr.addstr(0, 0, header.ljust(width), colors["header"] | curses.A_BOLD)
+            stdscr.addstr(1, 0, " [Space/Enter] Toggle  [Esc] Back to Settings ".ljust(width), colors["ui_border"])
+            stdscr.addstr(2, 0, "─" * width, colors["ui_border"])
+        except curses.error: pass
+        
+        # List
+        list_h = height - 4
+        list_start_y = 3
+        
+        if self.selected_index < self.scroll_offset:
+            self.scroll_offset = self.selected_index
+        elif self.selected_index >= self.scroll_offset + list_h:
+            self.scroll_offset = self.selected_index - list_h + 1
+
+        for i in range(list_h):
+            idx = self.scroll_offset + i
+            if idx >= len(self.items): break
+            
+            item = self.items[idx]
+            y = list_start_y + i
+            
+            marker = "[x]" if item["enabled"] else "[ ]"
+            display_str = f" {marker} {item['key']} {item['label']}"
+            
+            attr = curses.A_NORMAL
+            if idx == self.selected_index:
+                attr = curses.A_REVERSE
+            
+            try:
+                stdscr.addstr(y, 1, display_str.ljust(width-2), attr)
+            except curses.error: pass
+
+
 class SettingsManager:
     """設定を対話的に編集するクラス"""
     def __init__(self, config):
@@ -355,8 +474,12 @@ class SettingsManager:
         self.items = []
         # settings.jsonに保存したい項目を列挙
         for key, value in self.config.items():
-            if key == "colors": continue # Colors are handled separately
-            self.items.append({"key": key, "value": value, "type": type(value).__name__})
+            if key in ["colors", "displayed_keybindings"]: continue
+            self.items.append({"key": key, "value": value, "type": "setting"})
+        
+        # カスタム項目
+        self.items.append({"key": "Keybindings...", "value": "", "type": "action"})
+        
         self.items.sort(key=lambda x: x["key"])
 
     def navigate(self, delta):
@@ -369,15 +492,21 @@ class SettingsManager:
 
     def toggle_bool(self):
         item = self.get_current_item()
-        if item and item["type"] == "bool":
+        if item and item["type"] == "setting" and isinstance(item["value"], bool):
             item["value"] = not item["value"]
             self.config[item["key"]] = item["value"]
             return "Value changed. Press ^O to save."
         return None
 
-    def start_edit(self):
+    def start_edit(self, editor):
         item = self.get_current_item()
-        if item and item["type"] in ("int", "str"):
+        if not item: return
+
+        if item["type"] == "action" and item["key"] == "Keybindings...":
+            editor.active_pane = 'keybinding_settings'
+            return
+
+        if item["type"] == "setting" and isinstance(item["value"], (int, str)):
             self.edit_mode = True
             self.edit_buffer = str(item["value"])
 
@@ -394,15 +523,15 @@ class SettingsManager:
 
     def apply_edit(self):
         item = self.get_current_item()
-        if not item:
+        if not item or item["type"] != "setting":
             self.edit_mode = False
             return
 
         try:
             new_value = None
-            if item["type"] == "int":
+            if isinstance(item["value"], int):
                 new_value = int(self.edit_buffer)
-            elif item["type"] == "str":
+            elif isinstance(item["value"], str):
                 new_value = self.edit_buffer
 
             if new_value is not None:
@@ -411,7 +540,7 @@ class SettingsManager:
                 self.edit_mode = False
                 return "Value changed. Press ^O to save."
         except (ValueError, TypeError):
-            return "Invalid value for type " + item["type"]
+            return "Invalid value for type " + type(item["value"]).__name__
         self.edit_mode = False
         return None
 
@@ -947,6 +1076,7 @@ class Editor:
         self.terminal = Terminal(self.terminal_height)
         self.plugin_manager = PluginManager(get_config_dir())
         self.settings_manager = SettingsManager(self.config)
+        self.keybinding_settings_manager = KeybindingSettingsManager(self)
         
         self.status_message = ""
         self.status_expire_time = None
@@ -1694,6 +1824,14 @@ class Editor:
             }
             self.settings_manager.draw(self.stdscr, self.height, self.width, colors)
             return
+
+        if self.active_pane == 'keybinding_settings':
+            colors = {
+                "header": curses.color_pair(1),
+                "ui_border": curses.color_pair(10)
+            }
+            self.keybinding_settings_manager.draw(self.stdscr, self.height, self.width, colors)
+            return
             
         if self.active_pane == 'full_screen_explorer':
             colors = {
@@ -1843,17 +1981,17 @@ class Editor:
         self.safe_addstr(1, 0, header, curses.color_pair(1) | curses.A_BOLD)
         self.header_height = 1
 
-        shortcuts = [
-            ("^X", "CloseTab"), ("^S", "New/Start"), ("^L", "NextTab"), ("^O", "Save"),
-            ("^K", "Cut"), ("^U", "Paste"), ("^W", "Search"), ("^Z", "Undo"),
-            ("^6", "Mark"), ("^A", "All"), ("^G", "Goto"), ("^Y", "DelLine"),
-            ("^/", "Comment"), ("^F", "Explorer"), ("^T", "Terminal"), ("^E", "LineEnd")
-        ]
-
         menu_lines = []
         current_line_text = ""
         
-        for key_str, label in shortcuts:
+        displayed_ids = self.config.get("displayed_keybindings", [])
+        
+        for binding_id in displayed_ids:
+            binding_info = DEFAULT_KEYBINDINGS.get(binding_id)
+            if not binding_info: continue
+
+            key_str = binding_info["key"]
+            label = binding_info["label"]
             item_str = f"{key_str} {label}  "
             if len(current_line_text) + len(item_str) > self.width:
                 menu_lines.append(current_line_text)
@@ -2292,6 +2430,8 @@ class Editor:
                 curses.curs_set(0)
             elif self.active_pane == 'settings_manager':
                 curses.curs_set(0)
+            elif self.active_pane == 'keybinding_settings':
+                curses.curs_set(0)
             elif self.active_pane == 'full_screen_explorer':
                 curses.curs_set(0)
 
@@ -2353,6 +2493,19 @@ class Editor:
                     self.active_pane = 'editor'
                 continue
 
+            # --- Handle Keybinding Settings Input ---
+            if self.active_pane == 'keybinding_settings':
+                if key_code == curses.KEY_UP:
+                    self.keybinding_settings_manager.navigate(-1)
+                elif key_code == curses.KEY_DOWN:
+                    self.keybinding_settings_manager.navigate(1)
+                elif key_code in (KEY_ENTER, KEY_RETURN, ord(' ')):
+                    msg = self.keybinding_settings_manager.toggle_current()
+                    if msg: self.set_status(msg, timeout=3)
+                elif key_code == KEY_ESC:
+                    self.active_pane = 'settings_manager' # Go back to the main settings
+                continue
+
             # --- Handle Settings Manager Input ---
             if self.active_pane == 'settings_manager':
                 if self.settings_manager.edit_mode:
@@ -2365,7 +2518,7 @@ class Editor:
                     elif key_code == curses.KEY_DOWN:
                         self.settings_manager.navigate(1)
                     elif key_code in (KEY_ENTER, KEY_RETURN):
-                        self.settings_manager.start_edit()
+                        self.settings_manager.start_edit(self)
                     elif key_code == ord(' '):
                         res = self.settings_manager.toggle_bool()
                         if res: self.set_status(res, timeout=3)
