@@ -70,6 +70,7 @@ DEFAULT_CONFIG = {
     "terminal_height": 10,
     "show_explorer_default": True,
     "show_terminal_default": True,
+    "explorer_show_details": True, # エクスプローラーで日付やサイズを表示するか
     # --------------------------
     # --- Keybinding Display ---
     "displayed_keybindings": [
@@ -240,6 +241,29 @@ def strip_ansi(text):
 def get_char_width(char):
     """文字の表示幅を返す（半角=1, 全角=2）"""
     return 2 if unicodedata.east_asian_width(char) in ('F', 'W', 'A') else 1
+
+def get_string_display_width(s):
+    """文字列の合計表示幅を計算する"""
+    return sum(get_char_width(c) for c in s)
+
+def truncate_to_width(s, max_width):
+    """文字列を指定された表示幅に切り詰める"""
+    if get_string_display_width(s) <= max_width:
+        return s
+    
+    # 省略文字「…」の幅を考慮
+    max_width -= 1 
+    if max_width < 0: return "…"[:max_width+1]
+
+    current_width = 0
+    end_pos = 0
+    for char in s:
+        char_w = get_char_width(char)
+        if current_width + char_w > max_width:
+            break
+        current_width += char_w
+        end_pos += 1
+    return s[:end_pos] + "…"
 
 class Buffer:
     """エディタのテキスト内容を保持するクラス"""
@@ -625,6 +649,7 @@ class FileExplorer:
         self.sort_order = "asc" # "asc", "desc"
         self.show_hidden = False
         self.search_query = ""
+        self.show_details = editor.config.get("explorer_show_details", True)
         # -----------------
 
         self.refresh_list()
@@ -887,26 +912,44 @@ class FileExplorer:
                     size_col = human_readable_size(item["size"])
 
             # --- 画面幅に応じて表示を調整 ---
-            size_w = 8
-            mtime_w = 17
-
             available_w = w - 3 # margins
-            name_w = available_w
-            if available_w > mtime_w:
-                name_w -= mtime_w
-            if available_w > mtime_w + size_w:
-                name_w -= size_w
-            
-            # 切り詰め
-            if len(name_col) > name_w: name_col = name_col[:name_w-1] + "…"
+            display_str = ""
 
-            display_str = name_col.ljust(name_w)
-            if available_w > mtime_w:
-                display_str += mtime_col.rjust(mtime_w)
-            if available_w > mtime_w + size_w:
-                 display_str += size_col.rjust(size_w)
+            if self.show_details:
+                size_w = 8
+                mtime_w = 17
+                name_w = available_w
+
+                # 詳細表示のスペースがあれば列を追加
+                if available_w > mtime_w:
+                    name_w -= mtime_w
+                if available_w > mtime_w + size_w:
+                    name_w -= size_w
+
+                # 幅に合わせて名前を切り詰め
+                truncated_name = truncate_to_width(name_col, name_w)
+                
+                # ljustがマルチバイト文字でうまく動かない場合があるので、手動でパディング
+                padding_size = name_w - get_string_display_width(truncated_name)
+                
+                display_str = truncated_name + ' ' * padding_size
+
+                if available_w > mtime_w:
+                    display_str += mtime_col.rjust(mtime_w)
+                if available_w > mtime_w + size_w:
+                    display_str += size_col.rjust(size_w)
+            else:
+                # 詳細非表示の場合は名前のみ
+                name_w = available_w
+                truncated_name = truncate_to_width(name_col, name_w)
+                padding_size = name_w - get_string_display_width(truncated_name)
+                display_str = truncated_name + ' ' * padding_size
 
             try:
+                # 画面の端を超えないように最終チェック
+                if x + 1 + get_string_display_width(display_str) >= x + w:
+                     display_str = truncate_to_width(display_str, w - 2)
+
                 stdscr.addstr(draw_y, x + 1, display_str, attr)
             except curses.error: pass
 
@@ -914,7 +957,7 @@ class FileExplorer:
         try:
             footer_y = y + h - 1
             stdscr.addstr(footer_y, x, "─" * (w-1), colors["ui_border"])
-            help_text = " [a/d/r]File [s/o]Sort [h]Hid [/]Srch [Ent]Open "
+            help_text = " [a/d/r]File [s/o]Sort [h]Hid [i]Info [/]Srch [Ent]Open "
             stdscr.addstr(footer_y, x + 2, help_text[:w-3], colors["header"])
         except curses.error: pass
 
@@ -1572,6 +1615,9 @@ class Editor:
         elif cmd_key == ord('r'):
             msg = self.explorer.rename_selected()
             if msg: self.set_status(msg, timeout=3)
+        elif cmd_key == ord('i'):
+            self.explorer.show_details = not self.explorer.show_details
+            self.set_status(f"Show Details: {self.explorer.show_details}", timeout=2)
         elif cmd_key == KEY_ESC:
             self.active_pane = 'editor'
     # ==========================================
@@ -2981,3 +3027,4 @@ def start_app():
 
 if __name__ == "__main__":
     start_app()
+
