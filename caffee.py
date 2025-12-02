@@ -52,7 +52,7 @@ except ImportError:
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "2.2.0"
+VERSION = "2.3.0"
 DEFAULT_CONFIG = {
     "tab_width": 4,
     "history_limit": 50,
@@ -1087,6 +1087,7 @@ class Editor:
         
         self.plugin_key_bindings = {}
         self.plugin_commands = {} 
+        self.should_exit = False
         
         self.commands = {
             'open': self._command_open,
@@ -1208,7 +1209,7 @@ class Editor:
         self.run_interactive_start_screen()
 
     def close_current_tab(self):
-        """Close current tab. Returns True if exited editor entirely"""
+        """Close current tab. Returns True if exited editor, False if more tabs remain, None if cancelled"""
         if self.modified:
             self.status_message = "Close tab: Save changes? (y/n/Esc)"
             self.draw_ui()
@@ -1222,7 +1223,7 @@ class Editor:
                     break
                 elif ch == 27 or ch == CTRL_C:
                     self.status_message = "Cancelled."
-                    return False
+                    return None
         
         self.tabs.pop(self.active_tab_idx)
         if not self.tabs:
@@ -2454,12 +2455,9 @@ class Editor:
         if not filename:
             self.set_status("Usage: saveas <filename>", timeout=3)
             return
-        original_filename = self.filename
+        # Set the new filename for the current tab and then save.
         self.filename = filename
         self.save_file()
-        # If save was cancelled, restore original name
-        if self.filename != filename:
-             self.filename = original_filename
 
     def _command_close(self):
         """'close'コマンド: 現在のタブを閉じる"""
@@ -2470,14 +2468,21 @@ class Editor:
 
     def _command_quit(self):
         """'quit'コマンド: エディタを終了する"""
-        # This will be handled by returning a special value or setting a flag
-        # For now, let's just close all tabs. A more robust solution is needed.
-        for _ in range(len(self.tabs)):
-            if self.close_current_tab():
-                # We need a way to signal the main loop to exit.
-                # Let's create a flag for this.
+        # Loop until all tabs are closed or the user cancels.
+        while self.tabs:
+            result = self.close_current_tab()
+
+            if result is None:
+                # User cancelled the save prompt. Abort quitting.
+                break
+
+            if result is True:
+                # This was the last tab, editor should exit.
                 self.should_exit = True
                 break
+            
+            # if result is False, a tab was closed, but more remain.
+            # The loop will continue.
     
     def _command_new(self):
         """'new'コマンド: 新しい空のタブを作成"""
@@ -2513,7 +2518,6 @@ class Editor:
             self.set_status(f"Unknown setting: '{key}'", timeout=3)
 
     def main_loop(self):
-        self.should_exit = False # quitコマンド用のフラグ
         while not self.should_exit:
             self.stdscr.erase()
             self.height, self.width = self.stdscr.getmaxyx()
