@@ -138,6 +138,7 @@ DEFAULT_KEYBINDINGS = {
     "explorer": {"key": "^F", "label": "Explorer"},
     "terminal": {"key": "^T", "label": "Terminal"},
     "line_end": {"key": "^E", "label": "LineEnd"},
+    "command": {"key": "^P", "label": "Command"},
 }
 
 # --- デフォルトのシンタックスハイライト定義 ---
@@ -1086,6 +1087,20 @@ class Editor:
         
         self.plugin_key_bindings = {}
         self.plugin_commands = {} 
+        
+        self.commands = {
+            'open': self._command_open,
+            'o': self._command_open,
+            'save': self._command_save,
+            'w': self._command_save,
+            'saveas': self._command_saveas,
+            'close': self._command_close,
+            'q': self._command_close,
+            'quit': self._command_quit,
+            'qa': self._command_quit,
+            'new': self._command_new,
+            'set': self._command_set,
+        }
 
         self.init_colors()
 
@@ -2376,8 +2391,130 @@ class Editor:
         self.active_pane = 'terminal'
         self.terminal.write_input(cmd + "\n")
 
+    def enter_command_mode(self):
+        """コマンド入力モードを開始する"""
+        command_str = self._prompt_for_input(":")
+        if command_str is not None:
+            self.execute_command(command_str)
+
+    def execute_command(self, command_str):
+        """コマンド文字列を解釈して実行する"""
+        if not command_str.strip():
+            return
+            
+        parts = command_str.strip().split()
+        cmd = parts[0]
+        args = parts[1:]
+
+        if cmd in self.commands:
+            try:
+                # コマンドに対応するメソッドを引数付きで呼び出す
+                self.commands[cmd](*args)
+            except Exception as e:
+                self.set_status(f"Command error: {e}", timeout=4)
+        else:
+            self.set_status(f"Unknown command: {cmd}", timeout=3)
+
+    # --- Command Methods ---
+    def _command_open(self, filename=None):
+        """'open'コマンド: 新しいファイルを開く"""
+        if not filename:
+            self.set_status("Usage: open <filename>", timeout=3)
+            return
+
+        # すでに開いているかチェック
+        abs_path = os.path.abspath(filename)
+        for tab in self.tabs:
+            if tab.filename and os.path.abspath(tab.filename) == abs_path:
+                self.active_tab_idx = self.tabs.index(tab)
+                self.set_status(f"Switched to already open file: {filename}", timeout=3)
+                return
+
+        # 新しいタブで開く
+        new_lines, err = self.load_file(filename)
+        if not err:
+            mtime = None
+            try: mtime = os.path.getmtime(filename)
+            except OSError: pass
+            rules = self.detect_syntax(filename)
+            new_tab = EditorTab(Buffer(new_lines), filename, rules, mtime)
+            self.tabs.append(new_tab)
+            self.active_tab_idx = len(self.tabs) - 1
+            self.save_history(init=True)
+            self.set_status(f"Opened {filename}", timeout=3)
+        else:
+            self.set_status(err, timeout=4)
+
+    def _command_save(self):
+        """'save'コマンド: 現在のファイルを保存"""
+        self.save_file()
+
+    def _command_saveas(self, filename=None):
+        """'saveas'コマンド: 名前を付けて保存"""
+        if not filename:
+            self.set_status("Usage: saveas <filename>", timeout=3)
+            return
+        original_filename = self.filename
+        self.filename = filename
+        self.save_file()
+        # If save was cancelled, restore original name
+        if self.filename != filename:
+             self.filename = original_filename
+
+    def _command_close(self):
+        """'close'コマンド: 現在のタブを閉じる"""
+        if self.close_current_tab():
+             # This special case should not be hit from command mode,
+             # as the loop would exit.
+             pass
+
+    def _command_quit(self):
+        """'quit'コマンド: エディタを終了する"""
+        # This will be handled by returning a special value or setting a flag
+        # For now, let's just close all tabs. A more robust solution is needed.
+        for _ in range(len(self.tabs)):
+            if self.close_current_tab():
+                # We need a way to signal the main loop to exit.
+                # Let's create a flag for this.
+                self.should_exit = True
+                break
+    
+    def _command_new(self):
+        """'new'コマンド: 新しい空のタブを作成"""
+        self.new_tab()
+
+    def _command_set(self, key=None, value=None):
+        """'set'コマンド: 設定値を変更"""
+        if not key or value is None:
+            self.set_status("Usage: set <key> <value>", timeout=3)
+            return
+        
+        if key in self.config:
+            current_type = type(self.config[key])
+            try:
+                # 型を合わせて変換
+                if current_type == bool:
+                    new_value = value.lower() in ['true', '1', 'yes']
+                else:
+                    new_value = current_type(value)
+                
+                self.config[key] = new_value
+                self.set_status(f"Set {key} = {new_value}", timeout=3)
+                # Some settings require redraw or re-init
+                if key == 'tab_width':
+                    self.redraw_screen()
+                if key in self.config.get("colors", {}):
+                    self.init_colors()
+                    self.redraw_screen()
+
+            except (ValueError, TypeError):
+                self.set_status(f"Invalid value type for '{key}'. Expected {current_type.__name__}.", timeout=4)
+        else:
+            self.set_status(f"Unknown setting: '{key}'", timeout=3)
+
     def main_loop(self):
-        while True:
+        self.should_exit = False # quitコマンド用のフラグ
+        while not self.should_exit:
             self.stdscr.erase()
             self.height, self.width = self.stdscr.getmaxyx()
             
@@ -2590,6 +2727,7 @@ class Editor:
                 self.move_cursor(self.cursor_y, len(self.buffer.lines[self.cursor_y]), update_desired_x=True)
             elif key_code == CTRL_SLASH: self.toggle_comment()
             elif key_code == CTRL_Y: self.delete_line()
+            elif key_code == CTRL_P: self.enter_command_mode()
             elif key_code == CTRL_K: self.perform_cut()
             elif key_code == CTRL_U: self.perform_paste()
             elif key_code == CTRL_Z: self.undo()
