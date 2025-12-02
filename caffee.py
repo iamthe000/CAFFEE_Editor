@@ -59,6 +59,7 @@ DEFAULT_CONFIG = {
     "use_soft_tabs": True,
     "backup_subdir": "backup",
     "backup_count": 5,
+    "enable_predictive_text": True, # 予測変換を有効にするか
     # --- Splash / Start Screen Settings ---
     "show_splash": True,         # スプラッシュ画面を表示するか
     "splash_duration": 500,     # 自動遷移する場合の表示時間(ms)
@@ -1083,6 +1084,12 @@ class Editor:
         self.status_expire_time = None
         self.clipboard = []
         
+        # --- 予測変換の状態 ---
+        self.suggestions = []
+        self.suggestion_active = False
+        self.selected_suggestion_idx = 0
+        self.suggestion_word_start = None # (y, x) 補完中の単語の開始位置
+
         self.height, self.width = stdscr.getmaxyx()
         
         self.plugin_key_bindings = {}
@@ -1969,6 +1976,51 @@ class Editor:
                 colors["ui_border"] = colors["ui_border"] | curses.A_BOLD
             self.terminal.draw(self.stdscr, ty, tx, th, tw, colors)
 
+    def _draw_suggestions(self):
+        """Draw the predictive text suggestions box if active."""
+        if not self.suggestion_active or not self.suggestions:
+            return
+
+        linenum_width = max(4, len(str(len(self.buffer)))) + 1
+        edit_y, edit_x, _, _ = self.get_edit_rect()
+        
+        # Calculate screen position of the cursor
+        screen_y = self.cursor_y - self.scroll_offset + edit_y
+        
+        screen_x = edit_x + linenum_width
+        if self.cursor_y < len(self.buffer):
+            if self.cursor_x >= self.col_offset:
+                visible_segment = self.buffer.lines[self.cursor_y][self.col_offset : self.cursor_x]
+                for char in visible_segment:
+                    screen_x += get_char_width(char)
+
+        # Basic layout for the suggestion box
+        popup_y = screen_y + 1
+        popup_x = screen_x
+        
+        max_len = max(len(s) for s in self.suggestions)
+        popup_width = max_len + 2 # padding
+
+        # Adjust position if it goes off-screen
+        if popup_x + popup_width >= self.width:
+            popup_x = self.width - popup_width - 1
+        if popup_y + len(self.suggestions) >= self.height - self.menu_height - self.status_height:
+             popup_y = screen_y - len(self.suggestions)
+
+
+        for i, suggestion in enumerate(self.suggestions):
+            y = popup_y + i
+            if y >= self.height - self.menu_height - self.status_height:
+                break
+            
+            attr = curses.A_REVERSE if i == self.selected_suggestion_idx else curses.A_NORMAL
+            
+            # Use a color pair that stands out, e.g., header colors
+            bg_attr = curses.color_pair(1)
+            
+            display_str = f" {suggestion.ljust(max_len)} "
+            self.safe_addstr(y, popup_x, display_str, attr | bg_attr)
+
     def draw_ui(self):
         # Plugin Manager Mode doesn't use standard UI
         if self.active_pane in ('plugin_manager', 'settings_manager'):
@@ -2517,6 +2569,93 @@ class Editor:
         else:
             self.set_status(f"Unknown setting: '{key}'", timeout=3)
 
+    # --- Predictive Text Methods ---
+    def _update_suggestions(self):
+        """カーソル位置に基づいて予測変換の候補を更新する"""
+        if not self.config.get("enable_predictive_text", False):
+            self.suggestion_active = False
+            return
+
+        line = self.buffer.lines[self.cursor_y]
+        if self.cursor_x == 0:
+            self.suggestion_active = False
+            return
+
+        # Find the start of the current word
+        start_x = self.cursor_x
+        # 英数字かアンダースコアを単語構成文字とみなす
+        while start_x > 0 and (line[start_x - 1].isalnum() or line[start_x - 1] == '_'):
+            start_x -= 1
+        
+        current_word = line[start_x:self.cursor_x]
+
+        if len(current_word) < 2: # 2文字以上入力されたら候補を探す
+            self.suggestion_active = False
+            return
+
+        # Scan buffer for suggestions
+        candidates = set()
+        # \b is word boundary, re.escape escapes special characters in the word
+        pattern = re.compile(r'\b' + re.escape(current_word) + r'\w*\b')
+        for buffer_line in self.buffer.lines:
+            for match in pattern.finditer(buffer_line):
+                # 自分自身は候補に含めない
+                if match.group(0) != current_word:
+                    candidates.add(match.group(0))
+        
+        # Sort and limit suggestions
+        sorted_candidates = sorted(list(candidates))
+        
+        if sorted_candidates:
+            self.suggestions = sorted_candidates[:5] # 最大5件まで
+            self.suggestion_active = True
+            self.selected_suggestion_idx = 0
+            self.suggestion_word_start = (self.cursor_y, start_x)
+        else:
+            self.suggestion_active = False
+            self.suggestions = []
+            self.suggestion_word_start = None
+
+    def _apply_suggestion(self):
+        """選択された予測候補を適用する"""
+        if not self.suggestion_active or not self.suggestions:
+            return
+
+        y, start_x = self.suggestion_word_start
+        if y != self.cursor_y:
+            self.suggestion_active = False
+            return
+
+        line = self.buffer.lines[y]
+        current_word = line[start_x:self.cursor_x]
+        
+        selected_suggestion = self.suggestions[self.selected_suggestion_idx]
+        
+        # 候補が現在の単語と一致しなくなったらキャンセル
+        if not selected_suggestion.startswith(current_word):
+            self.suggestion_active = False
+            return
+            
+        text_to_insert = selected_suggestion[len(current_word):]
+        
+        self.save_history()
+        
+        # 単語の残りを挿入
+        prefix = line[:self.cursor_x]
+        suffix = line[self.cursor_x:]
+        self.buffer.lines[y] = prefix + text_to_insert + suffix
+        
+        # カーソルを単語の末尾に移動
+        self.move_cursor(y, self.cursor_x + len(text_to_insert), update_desired_x=True)
+        self.modified = True
+        
+        # 候補表示をリセット
+        self.suggestion_active = False
+        self.suggestions = []
+        self.suggestion_word_start = None
+
+    # -----------------------------
+
     def main_loop(self):
         while not self.should_exit:
             self.stdscr.erase()
@@ -2537,6 +2676,7 @@ class Editor:
 
             self.draw_ui()
             self.draw_content()
+            self._draw_suggestions()
             
             if self.active_pane == 'editor':
                 linenum_width = max(4, len(str(len(self.buffer)))) + 1
@@ -2736,13 +2876,27 @@ class Editor:
             elif key_code == CTRL_U: self.perform_paste()
             elif key_code == CTRL_Z: self.undo()
             elif key_code == CTRL_R: self.redo()
-            elif key_code == curses.KEY_UP: self.move_cursor(self.cursor_y - 1, self.desired_x)
-            elif key_code == curses.KEY_DOWN: self.move_cursor(self.cursor_y + 1, self.desired_x)
-            elif key_code == curses.KEY_LEFT: self.move_cursor(self.cursor_y, self.cursor_x - 1, update_desired_x=True)
-            elif key_code == curses.KEY_RIGHT: self.move_cursor(self.cursor_y, self.cursor_x + 1, update_desired_x=True)
-            elif key_code == curses.KEY_PPAGE: 
+            elif key_code == curses.KEY_UP:
+                if self.suggestion_active:
+                    self.selected_suggestion_idx = (self.selected_suggestion_idx - 1 + len(self.suggestions)) % len(self.suggestions)
+                else:
+                    self.move_cursor(self.cursor_y - 1, self.desired_x)
+            elif key_code == curses.KEY_DOWN:
+                if self.suggestion_active:
+                    self.selected_suggestion_idx = (self.selected_suggestion_idx + 1) % len(self.suggestions)
+                else:
+                    self.move_cursor(self.cursor_y + 1, self.desired_x)
+            elif key_code == curses.KEY_LEFT:
+                self.suggestion_active = False
+                self.move_cursor(self.cursor_y, self.cursor_x - 1, update_desired_x=True)
+            elif key_code == curses.KEY_RIGHT:
+                self.suggestion_active = False
+                self.move_cursor(self.cursor_y, self.cursor_x + 1, update_desired_x=True)
+            elif key_code == curses.KEY_PPAGE:
+                self.suggestion_active = False
                 self.move_cursor(self.cursor_y - self.get_edit_height(), self.cursor_x, update_desired_x=True)
-            elif key_code == curses.KEY_NPAGE: 
+            elif key_code == curses.KEY_NPAGE:
+                self.suggestion_active = False
                 self.move_cursor(self.cursor_y + self.get_edit_height(), self.cursor_x, update_desired_x=True)
             elif key_code in (curses.KEY_BACKSPACE, KEY_BACKSPACE, KEY_BACKSPACE2):
                 if self.mark_pos: self.perform_cut() 
@@ -2759,7 +2913,12 @@ class Editor:
                     del self.buffer.lines[self.cursor_y]
                     self.move_cursor(self.cursor_y - 1, prev_len, update_desired_x=True)
                     self.modified = True
+                self._update_suggestions()
             elif key_code == KEY_ENTER or key_code == KEY_RETURN:
+                if self.suggestion_active:
+                    self._apply_suggestion()
+                    continue
+                self.suggestion_active = False
                 self.save_history()
                 line = self.buffer.lines[self.cursor_y]
                 indent = ""
@@ -2771,6 +2930,9 @@ class Editor:
                 self.move_cursor(self.cursor_y + 1, len(indent), update_desired_x=True)
                 self.modified = True
             elif key_code == KEY_TAB:
+                if self.suggestion_active:
+                    self._apply_suggestion()
+                    continue
                 self.save_history()
                 tab_spaces = " " * self.config.get("tab_width", 4)
                 line = self.buffer.lines[self.cursor_y]
@@ -2784,6 +2946,7 @@ class Editor:
                 self.buffer.lines[self.cursor_y] = line[:self.cursor_x] + char_input + line[self.cursor_x:]
                 self.move_cursor(self.cursor_y, self.cursor_x + 1, update_desired_x=True)
                 self.modified = True
+                self._update_suggestions()
 
 def main(stdscr):
     os.environ.setdefault('ESCDELAY', '25')
