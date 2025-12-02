@@ -1,5 +1,14 @@
 # ☕ CAFFEE Command Line Text Editor
 
+## install
+```bash
+pip install caffee
+```
+## upgrade
+```bash
+pip install caffee --upgrade
+```
+
 <a href="ja-README.md">🇯🇵 日本語版README</a>　
 <a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">Official Japanese UI Plugin</a>　
 <a href="Nuitka_Step.md">Nuitka Compilation Guide</a>　
