@@ -74,7 +74,7 @@ DEFAULT_CONFIG = {
     "displayed_keybindings": [
         "close_tab", "new_start", "next_tab", "save", "cut", "paste", "search", 
         "undo", "redo", "copy", "build", "mark", "select_all", "goto", 
-        "delete_line", "comment", "explorer", "terminal", "line_end"
+        "delete_line", "comment", "explorer", "terminal", "line_end", "command"
     ],
     # --------------------------
     "colors": {
