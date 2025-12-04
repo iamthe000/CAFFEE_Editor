@@ -12,6 +12,7 @@ import traceback
 import unicodedata
 import select
 import subprocess
+import time
 
 # --- 定数定義 (Key Codes) ---
 CTRL_A = 1
@@ -52,7 +53,7 @@ except ImportError:
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "2.3.0"
+VERSION = "2.3.1"
 DEFAULT_CONFIG = {
     "tab_width": 4,
     "history_limit": 50,
@@ -64,6 +65,7 @@ DEFAULT_CONFIG = {
     "show_splash": True,         # スプラッシュ画面を表示するか
     "splash_duration": 500,     # 自動遷移する場合の表示時間(ms)
     "start_screen_mode": True,  # 起動時にスタート画面(インタラクティブ)を有効にするか
+    "show_startup_time": False, # 起動時間を表示するか
     # --------------------------
     # --- UI Layout Settings ---
     "explorer_width": 50,
@@ -1070,7 +1072,7 @@ class EditorTab:
         self.current_syntax_rules = syntax_rules
 
 class Editor:
-    def __init__(self, stdscr, filename=None):
+    def __init__(self, stdscr, filename=None, start_time=None):
         self.stdscr = stdscr
         self.config = DEFAULT_CONFIG.copy()
         self.syntax_rules = DEFAULT_SYNTAX_RULES.copy()
@@ -1138,6 +1140,8 @@ class Editor:
         self.plugin_key_bindings = {}
         self.plugin_commands = {} 
         self.should_exit = False
+        self.start_time = start_time
+        self.first_loop = True
         
         self.commands = {
             'open': self._command_open,
@@ -1620,6 +1624,23 @@ class Editor:
             self.set_status(f"Show Details: {self.explorer.show_details}", timeout=2)
         elif cmd_key == KEY_ESC:
             self.active_pane = 'editor'
+
+    def _create_default_settings_file(self):
+        """Creates or overwrites the setting.json file with default values."""
+        setting_dir = get_config_dir()
+        setting_file = os.path.join(setting_dir, "setting.json")
+
+        if os.path.exists(setting_file):
+            if not self._prompt_for_confirmation("setting.json already exists. Overwrite? (y/n)"):
+                self.set_status("Operation cancelled.", timeout=3)
+                return
+
+        try:
+            with open(setting_file, 'w', encoding='utf-8') as f:
+                json.dump(DEFAULT_CONFIG, f, indent=4, ensure_ascii=False)
+            self.set_status("Default setting.json created successfully.", timeout=3)
+        except OSError as e:
+            self.set_status(f"Error creating file: {e}", timeout=5)
     # ==========================================
 
     def insert_text(self, text):
@@ -1721,6 +1742,10 @@ class Editor:
                 elif choice == 1: # Choice setting
                     self.active_pane = 'settings_manager'
                     break
+                elif choice == 2: # Create default JSON
+                    self._create_default_settings_file()
+                    # Stay on the start screen after the operation
+                    continue
                 # if choice is -1, do nothing and stay on start screen
 
             elif ch == CTRL_P:
@@ -1736,7 +1761,7 @@ class Editor:
 
     def run_settings_menu(self):
         """設定メニューを表示し、ユーザーの選択を待つ"""
-        menu_items = ["[1] Open setting.json", "[2] Choice setting"]
+        menu_items = ["[1] Open setting.json", "[2] Choice setting", "[3] Create default-json"]
         selected_index = 0
 
         while True:
@@ -1765,9 +1790,10 @@ class Editor:
                 selected_index = (selected_index - 1) % len(menu_items)
             elif ch == curses.KEY_DOWN:
                 selected_index = (selected_index + 1) % len(menu_items)
-            elif ch in (KEY_ENTER, KEY_RETURN, ord('1'), ord('2')):
+            elif ch in (KEY_ENTER, KEY_RETURN, ord('1'), ord('2'), ord('3')):
                 if ch == ord('1') : selected_index = 0
                 if ch == ord('2') : selected_index = 1
+                if ch == ord('3') : selected_index = 2
                 return selected_index
             elif ch == KEY_ESC:
                 return -1 # Cancel
@@ -2704,6 +2730,12 @@ class Editor:
 
     def main_loop(self):
         while not self.should_exit:
+            if self.first_loop:
+                if self.config.get("show_startup_time") and self.start_time:
+                    elapsed = time.time() - self.start_time
+                    self.set_status(f"Startup time: {elapsed:.3f} seconds", timeout=5)
+                self.first_loop = False
+
             self.stdscr.erase()
             self.height, self.width = self.stdscr.getmaxyx()
             
@@ -2994,12 +3026,12 @@ class Editor:
                 self.modified = True
                 self._update_suggestions()
 
-def main(stdscr):
+def main(stdscr, start_time):
     os.environ.setdefault('ESCDELAY', '25')
     curses.raw()
     fn = sys.argv[1] if len(sys.argv) > 1 else None
     try:
-        Editor(stdscr, fn).main_loop()
+        Editor(stdscr, fn, start_time=start_time).main_loop()
     except Exception as e:
         # Ensure curses is ended before printing
         curses.endwin()
@@ -3007,6 +3039,7 @@ def main(stdscr):
         traceback.print_exc(file=sys.stderr)
 
 def start_app():
+    start_time = time.time()
     term = os.environ.get("TERM", "")
     if "ish" in term:
         # Attempt to make iSH compatible by setting a common TERM value
@@ -3016,7 +3049,7 @@ def start_app():
         return
 
     try:
-        curses.wrapper(main)
+        curses.wrapper(main, start_time)
     except curses.error as e:
         print(f"Failed to start Caffee editor due to a curses error: {e}", file=sys.stderr)
         print("Your terminal might not be fully compatible.", file=sys.stderr)
