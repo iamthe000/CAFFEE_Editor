@@ -1141,7 +1141,6 @@ class Editor:
         self.plugin_commands = {} 
         self.should_exit = False
         self.start_time = start_time
-        self.first_loop = True
         
         self.commands = {
             'open': self._command_open,
@@ -1824,6 +1823,11 @@ class Editor:
                 self.safe_addstr(my + i, max(0, mx - start_x_offset), l.rstrip(), logo_attr)
                 
         self.safe_addstr(my + len(logo) + 1, max(0, mx - 12), f"CAFFEE Editor v{VERSION}", logo_attr)
+
+        if self.config.get("show_startup_time") and self.start_time:
+            elapsed = time.time() - self.start_time
+            startup_msg = f"Startup time: {elapsed:.3f} seconds"
+            self.safe_addstr(my + len(logo) + 2, max(0, mx - len(startup_msg)//2), startup_msg, logo_attr)
         
         # --- インタラクティブモードの場合の表示 ---
         if interactive:
@@ -2730,12 +2734,6 @@ class Editor:
 
     def main_loop(self):
         while not self.should_exit:
-            if self.first_loop:
-                if self.config.get("show_startup_time") and self.start_time:
-                    elapsed = time.time() - self.start_time
-                    self.set_status(f"Startup time: {elapsed:.3f} seconds", timeout=5)
-                self.first_loop = False
-
             self.stdscr.erase()
             self.height, self.width = self.stdscr.getmaxyx()
             
