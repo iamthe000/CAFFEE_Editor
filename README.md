@@ -27,6 +27,7 @@ pip install caffee --upgrade
 - **Enhanced Visual Design** - Improved color schemes and status indicators
 
 ### 🚀 **Productivity Features**
+- **Git Integration** - View the current Git branch in the header and file status in each tab (`~`: modified, `+`: new/untracked).
 - **Integrated File Explorer** (`Ctrl+F`) - Browse and open files without leaving the editor
 - **Built-in Terminal** (`Ctrl+T`) - Execute commands and run code directly from the editor
 - **Plugin Manager** (`Ctrl+P` from start screen) - Enable/disable plugins with visual interface
