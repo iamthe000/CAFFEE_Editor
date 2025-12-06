@@ -18,43 +18,49 @@ pip install caffee --upgrade
 
 ---
 
-## ✨ What's New in v2.0.0
+## ✨ What's New in v2.4.0
 
 ### 🎨 **Modern UI Enhancements**
-- **Interactive Start Screen** - Welcome screen with quick access to settings, plugins, and file explorer
-- **Tab Bar System** - Multi-file editing with visual tab management
-- **Split Panel Layout** - Toggle file explorer and integrated terminal panels
-- **Enhanced Visual Design** - Improved color schemes and status indicators
+- **Interactive Start Screen** - Welcome screen with quick access to settings, plugins, and file explorer.
+- **Tab Bar System** - Multi-file editing with visual tab management.
+- **Split Panel Layout** - Toggle file explorer and integrated terminal panels.
+- **Enhanced Visual Design** - Improved color schemes and status indicators.
 
 ### 🚀 **Productivity Features**
-- **Git Integration** - View the current Git branch in the header and file status in each tab (`~`: modified, `+`: new/untracked).
-- **Integrated File Explorer** (`Ctrl+F`) - Browse and open files without leaving the editor
-- **Built-in Terminal** (`Ctrl+T`) - Execute commands and run code directly from the editor
-- **Plugin Manager** (`Ctrl+P` from start screen) - Enable/disable plugins with visual interface
-- **Build & Run** (`Ctrl+B`) - Automatic compilation and execution for Python, JavaScript, Go, C/C++, Rust, and shell scripts
-- **Smart Horizontal Scrolling** - Nano-style smooth scrolling for long lines
-- **Full-Width Character Support** - Proper handling of Japanese and other wide characters
+- **Git Integration** - View the current Git branch, file status in each tab (`~`: modified, `+`: new/untracked), and open a diff view (`Ctrl+D`).
+- **Command Mode** (`Ctrl+P`) - Execute commands like `:open`, `:saveas`, `:set`, and `:diff`.
+- **Predictive Text** - Get auto-completion suggestions from words in the current buffer.
+- **Enhanced File Explorer** (`Ctrl+F`) - Browse and manage files with advanced features:
+    - Sort by name, date, or size (`s` key).
+    - Toggle ascending/descending order (`o` key).
+    - Show/hide hidden files (`h` key).
+    - Search with wildcards (`/` key).
+    - Create, delete, and rename files/directories (`a`, `d`, `r` keys).
+- **Built-in Terminal** (`Ctrl+T`) - Execute commands directly from the editor.
+- **Plugin & Settings Manager** - Interactive menus to manage plugins and editor settings.
+- **Build & Run** (`Ctrl+B`) - Automatic compilation and execution for various languages.
+- **Smart Horizontal Scrolling** - Nano-style smooth scrolling for long lines.
+- **Full-Width Character Support** - Proper handling of Japanese and other wide characters.
 
 ### 🎨 **Syntax Highlighting**
-- Python, JavaScript, C/C++, Go, Rust, HTML, Markdown support
-- Customizable color schemes via settings
+- Python, JavaScript, C/C++, Go, Rust, HTML, Markdown, and Git Diff support.
+- Customizable color schemes via `setting.json`.
 
 ### 📑 **Multi-Tab Editing**
-- `Ctrl+S` - Create new tab or return to start screen
-- `Ctrl+L` - Switch to next tab
-- `Ctrl+X` - Close current tab (prompts if unsaved)
+- `Ctrl+S` - Create a new tab or return to the start screen.
+- `Ctrl+L` - Switch to the next tab.
+- `Ctrl+X` - Close the current tab (prompts if unsaved).
 
 ---
 
 ## 💡 Core Features
 
-- **Small and focused** editing experience
-- **Undo/Redo** history with configurable limit
-- **Mark-based selection** and clipboard operations (cut/copy/paste)
-- **Line operations** (delete, comment/uncomment, goto)
-- **Atomic file saving** with automatic backup creation
-- **Plugin system** for extensibility
-- **JSON configuration** for customization
+- **Small and focused** editing experience.
+- **Undo/Redo** history with a configurable limit.
+- **Mark-based selection** and clipboard operations (cut/copy/paste).
+- **Line operations** (delete, comment/uncomment, goto).
+- **Atomic file saving** with automatic backup creation.
+- **Extensible plugin system** and JSON configuration.
 
 ---
 
@@ -66,34 +72,16 @@ pip install caffee --upgrade
 - `curses` library (usually included with Python)
 
 ### Quick Start
-
 ```bash
-# Download or clone the repository
-git clone <repository-url>
-cd CAFFEE_Editor
-
-# Run directly
-python3 caffee.py
+# Run the editor
+caffee
 
 # Or open a specific file
-python3 caffee.py /path/to/file.py
+caffee /path/to/file.py
 ```
 
 ### Optional: Speed Up with Nuitka
-
-For significantly faster startup and execution, compile with Nuitka (Debian/Ubuntu):
-
-```bash
-python3 -m venv myenv
-source myenv/bin/activate
-pip install nuitka
-sudo apt install patchelf
-python -m nuitka --standalone caffee.py
-cd caffee.dist
-./caffee.bin
-```
-
-See [Nuitka_Step.md](Nuitka_Step.md) for detailed instructions and troubleshooting.
+For significantly faster startup, compile with Nuitka. See the [Nuitka Compilation Guide](Nuitka_Step.md) for detailed instructions.
 
 ---
 
@@ -126,8 +114,6 @@ See [Nuitka_Step.md](Nuitka_Step.md) for detailed instructions and troubleshooti
 | `Ctrl+E` | Move to end of line |
 | `Ctrl+A` | Select all / Clear selection |
 | `Ctrl+6` | Set/Unset mark (selection start) |
-| Arrow Keys | Navigate cursor |
-| PageUp/Down | Scroll by page |
 
 ### Panels & Tools
 | Key | Action |
@@ -135,14 +121,31 @@ See [Nuitka_Step.md](Nuitka_Step.md) for detailed instructions and troubleshooti
 | `Ctrl+F` | Toggle file explorer |
 | `Ctrl+T` | Toggle integrated terminal |
 | `Ctrl+B` | Build/Run current file |
-| `Ctrl+P` | Plugin manager (from start screen) |
+| `Ctrl+D` | Show Git diff for the current file |
+| `Ctrl+P` | Enter Command Mode |
 | `Esc` | Return to editor from panels |
+
+---
+
+## 🚀 Command Mode
+Press `Ctrl+P` to enter Command Mode, then type a command and press Enter.
+
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `open <file>`| `o <file>` | Open a file in a new tab. |
+| `save` | `w` | Save the current file. |
+| `saveas <file>` | | Save the current file with a new name. |
+| `close` | `q` | Close the current tab. |
+| `quit` | `qa` | Exit the editor (prompts for unsaved files). |
+| `new` | | Create a new empty tab. |
+| `set <key> <val>` | | Change a setting (e.g., `set tab_width 2`). |
+| `diff` | | Show a Git diff of the current file in a new tab. |
 
 ---
 
 ## ⚙️ Configuration
 
-User settings are stored in `~/.caffee_setting/setting.json`.
+User settings are stored in `~/.caffee_setting/setting.json`. You can edit this file directly or use the interactive settings manager from the start screen (`Ctrl+S` -> `[2] Choice setting`).
 
 ### Example Configuration
 
@@ -151,151 +154,59 @@ User settings are stored in `~/.caffee_setting/setting.json`.
   "tab_width": 4,
   "history_limit": 50,
   "use_soft_tabs": true,
-  "backup_subdir": "backup",
   "backup_count": 5,
+  "enable_predictive_text": true,
   
-  "show_splash": true,
-  "splash_duration": 500,
   "start_screen_mode": true,
-  
-  "explorer_width": 35,
-  "terminal_height": 10,
-  "show_explorer_default": false,
-  "show_terminal_default": false,
+  "show_explorer_default": true,
+  "explorer_show_details": true,
   
   "colors": {
     "header_text": "BLACK",
     "header_bg": "WHITE",
-    "error_text": "WHITE",
-    "error_bg": "RED",
-    "linenum_text": "CYAN",
-    "linenum_bg": "DEFAULT",
-    "selection_text": "BLACK",
-    "selection_bg": "CYAN",
     "keyword": "YELLOW",
     "string": "GREEN",
     "comment": "MAGENTA",
     "number": "BLUE",
-    "ui_border": "WHITE",
-    "tab_active_bg": "BLUE"
+    "diff_add": "GREEN",
+    "diff_remove": "RED"
   }
 }
 ```
 
-### Configuration Options
-
-- **Editor Settings**: `tab_width`, `history_limit`, `use_soft_tabs`
-- **Backup**: `backup_subdir`, `backup_count` (automatic versioned backups)
-- **Startup**: `show_splash`, `splash_duration`, `start_screen_mode`
-- **Layout**: `explorer_width`, `terminal_height`, panel visibility defaults
-- **Colors**: Comprehensive color customization for all UI elements
+### Key Configuration Options
+- **`enable_predictive_text`**: Enable/disable auto-completion suggestions.
+- **`explorer_show_details`**: Show file size and modification date in the explorer.
+- **`displayed_keybindings`**: Customize which keybindings appear in the footer bar.
+- **`colors`**: Comprehensive color customization for all UI elements.
 
 ---
 
 ## 🧩 Plugin System
-
-Plugins are Python files in `~/.caffee_setting/plugins/`.
+Extend CAFFEE's functionality with custom Python scripts placed in `~/.caffee_setting/plugins/`. Use the interactive Plugin Manager (Start Screen -> `Ctrl+P`) to enable or disable plugins.
 
 ### Plugin API
-
-Plugins can expose an `init(editor)` function with access to:
-
-- **Cursor & Buffer Access**: `get_cursor_position()`, `get_line_content()`, `get_buffer_lines()`
-- **Editing Operations**: `insert_text_at_cursor()`, `delete_range()`, `replace_text()`
-- **Selection**: `get_selection_text()`, `get_selection_range()`
-- **Key Binding**: `bind_key(key_code, function)`
-- **UI Feedback**: `set_status_message()`, `redraw_screen()`
-- **User Input**: `prompt_user(message, default="")`
-
-### Example Plugin
-
-```python
-def init(editor):
-    def uppercase_selection(ed):
-        text = ed.get_selection_text()
-        if text:
-            lines = [line.upper() for line in text]
-            # Process selection...
-            ed.set_status_message("Converted to uppercase!")
-        else:
-            ed.set_status_message("No selection")
-    
-    # Bind to Ctrl+Shift+U (if terminal supports)
-    editor.bind_key(21, uppercase_selection)
-```
-
-### Plugin Manager
-
-Access via `Ctrl+P` from the start screen:
-- View all installed plugins
-- Enable/disable plugins with spacebar
-- Changes take effect after editor restart
-
-Disabled plugins are moved to `~/.caffee_setting/plugins/disabled/`.
-
----
-
-## 🚀 Built-in Commands
-
-CAFFEE automatically detects file types and provides build/run commands:
-
-| File Type | Command |
-|-----------|---------|
-| `.py` | `python3 <file>` |
-| `.js` | `node <file>` |
-| `.go` | `go run <file>` |
-| `.c` | `gcc <file> -o <output> && ./<output>` |
-| `.cpp`, `.cc` | `g++ <file> -o <output> && ./<output>` |
-| `.sh` | `bash <file>` |
-| `.rs` | `rustc <file> && ./<output>` |
-
-Press `Ctrl+B` to save and run the current file. Output appears in the integrated terminal.
+Plugins can access the editor's state and functions via an `init(editor)` entry point, allowing you to:
+- Bind custom key combinations.
+- Register new syntax highlighting rules.
+- Add new build commands.
+- Manipulate buffers and the cursor.
+- Display custom messages in the status bar.
 
 ---
 
 ## 🛠️ Troubleshooting
 
-### Display Issues
-- **Japanese text garbled?** See [Nuitka_Step.md](Nuitka_Step.md) for locale configuration
-- **Colors not working?** Ensure your terminal supports 256 colors
-- **Curses errors?** Verify Python's curses library is available on your platform
-
-### File Operations
-- **File changed on disk**: CAFFEE detects external changes but won't auto-reload to prevent data loss
-- **Backup files**: Located in `~/.caffee_setting/backup/` with timestamps
-
-### Terminal Integration
-- **Terminal not working?** The integrated terminal requires `pty` support (Unix-like systems only)
-- **Build command fails?** Ensure required compilers/interpreters are in your PATH
+- **Display Issues**: If colors or special characters don't render correctly, ensure your terminal supports 256 colors and UTF-8. For environments like iSH, CAFFEE attempts to set a compatible `TERM` variable automatically.
+- **File Access**: If you encounter errors saving files or creating backups, check the permissions for `~/.caffee_setting/`.
+- **Terminal Not Working**: The integrated terminal requires `pty` support (standard on Linux and macOS).
 
 ---
 
 ## 🤝 Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make focused, well-documented changes
-4. Test in multiple terminal environments
-5. Submit a pull request with clear descriptions
-
-### Development Guidelines
-- Maintain compatibility with Python 3.6+
-- Respect terminal resizing behavior
-- Keep the codebase simple and readable
-- Follow existing code style
+Contributions are welcome! Please fork the repository, make focused changes in a feature branch, and submit a pull request.
 
 ---
 
 ## 📄 License
-
-MIT License - See [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-Built with Python's `curses` library. Inspired by nano, vim, and modern code editors.
-
-**CAFFEE** - *Brew your code in the terminal* ☕
+MIT License - See the [LICENSE](LICENSE) file for details.
