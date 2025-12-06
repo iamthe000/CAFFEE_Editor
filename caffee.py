@@ -104,7 +104,10 @@ DEFAULT_CONFIG = {
         "tab_active_text": "WHITE",
         "tab_active_bg": "BLUE",
         "tab_inactive_text": "WHITE",
-        "tab_inactive_bg": "DEFAULT"
+        "tab_inactive_bg": "DEFAULT",
+        # --- Git Diff Colors ---
+        "diff_add": "GREEN",
+        "diff_remove": "RED"
     }
 }
 
@@ -143,6 +146,7 @@ DEFAULT_KEYBINDINGS = {
     "terminal": {"key": "^T", "label": "Terminal"},
     "line_end": {"key": "^E", "label": "LineEnd"},
     "command": {"key": "^P", "label": "Command"},
+    "diff": {"key": "^D", "label": "Diff"},
 }
 
 # --- デフォルトのシンタックスハイライト定義 ---
@@ -195,6 +199,10 @@ DEFAULT_SYNTAX_RULES = {
         "comments": r"^>.*",
         "strings": r"(`[^`]+`|\*\*.*?\*\*)",
         "numbers": r"\[.*?\]"
+    },
+    "diff": {
+        "extensions": [],
+        "language_name": "diff"
     }
 }
 
@@ -1071,6 +1079,7 @@ class EditorTab:
         self.file_mtime = mtime
         self.current_syntax_rules = syntax_rules
         self.git_status = None # Can be 'M' (modified), 'A' (added/untracked), or None
+        self.read_only = False
 
 class Editor:
     def __init__(self, stdscr, filename=None, start_time=None):
@@ -1158,6 +1167,7 @@ class Editor:
             'qa': self._command_quit,
             'new': self._command_new,
             'set': self._command_set,
+            'diff': self.show_git_diff,
         }
 
         self.init_colors()
@@ -1324,6 +1334,10 @@ class Editor:
                 # Tab Colors
                 curses.init_pair(14, self._get_color(c.get("tab_active_text", "WHITE")), self._get_color(c.get("tab_active_bg", "BLUE")))
                 curses.init_pair(15, self._get_color(c.get("tab_inactive_text", "WHITE")), self._get_color(c.get("tab_inactive_bg", "DEFAULT")))
+
+                # Diff Colors
+                curses.init_pair(16, self._get_color(c.get("diff_add", "GREEN")), -1)
+                curses.init_pair(17, self._get_color(c.get("diff_remove", "RED")), -1)
 
 
             except curses.error:
@@ -1582,6 +1596,47 @@ class Editor:
             return result.stdout.strip()
         except (subprocess.CalledProcessError, FileNotFoundError):
             return None
+
+    def _get_git_diff(self, filepath):
+        """Get the git diff for a specific file."""
+        if not filepath or not self.git_branch:
+            return ["Git repository not found or file not tracked."]
+
+        try:
+            result = subprocess.run(
+                ['git', 'diff', 'HEAD', '--', filepath],
+                capture_output=True, text=True, cwd=os.getcwd()
+            )
+            if not result.stdout.strip():
+                return ["No changes since last commit."]
+
+            return result.stdout.splitlines()
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return ["Could not get git diff."]
+
+    def show_git_diff(self):
+        """Show the git diff for the current file in a new tab."""
+        if not self.filename:
+            self.set_status("Cannot show diff for an unsaved file.", timeout=3)
+            return
+
+        diff_lines = self._get_git_diff(self.filename)
+
+        diff_tab_name = f"diff://{os.path.basename(self.filename)}"
+
+        # Check if a diff tab for this file already exists
+        for i, tab in enumerate(self.tabs):
+            if tab.filename == diff_tab_name:
+                self.active_tab_idx = i
+                # Optionally refresh content
+                tab.buffer = Buffer(diff_lines)
+                return
+
+        new_tab = EditorTab(Buffer(diff_lines), diff_tab_name, self.syntax_rules["diff"], None)
+        new_tab.read_only = True
+
+        self.tabs.append(new_tab)
+        self.active_tab_idx = len(self.tabs) - 1
 
     def _get_git_file_status(self, filepath):
         """Get the git status for a specific file."""
@@ -2003,6 +2058,10 @@ class Editor:
         ATTR_NUMBER = curses.color_pair(8)
         ATTR_ZENKAKU = curses.color_pair(9)
         ATTR_SELECT = curses.color_pair(4)
+        ATTR_DIFF_ADD = curses.color_pair(16)
+        ATTR_DIFF_REMOVE = curses.color_pair(17)
+
+        is_diff_view = self.current_syntax_rules and self.current_syntax_rules.get("language_name") == "diff"
 
         for i in range(edit_h):
             file_line_idx = self.scroll_offset + i
@@ -2029,8 +2088,12 @@ class Editor:
                 # --- シンタックスハイライト (全体に対して計算し、表示時にシフト) ---
                 line_attrs = [ATTR_NORMAL] * len(line)
                 
-                # ハイライトは行全体に対して適用（Regex判定のため）
-                if self.current_syntax_rules:
+                if is_diff_view:
+                    if line.startswith('+'):
+                        for j in range(len(line_attrs)): line_attrs[j] = ATTR_DIFF_ADD
+                    elif line.startswith('-'):
+                        for j in range(len(line_attrs)): line_attrs[j] = ATTR_DIFF_REMOVE
+                elif self.current_syntax_rules:
                     if "keywords" in self.current_syntax_rules:
                         for match in re.finditer(self.current_syntax_rules["keywords"], line):
                             for j in range(match.start(), match.end()):
@@ -2984,7 +3047,17 @@ class Editor:
                 except Exception as e: self.set_status(f"Plugin Error: {e}", timeout=5)
                 continue
 
-            if key_code == CTRL_C:
+            # Block editing in read-only tabs, but allow navigation/closing
+            if self.current_tab.read_only:
+                if key_code not in (CTRL_X, CTRL_L, curses.KEY_UP, curses.KEY_DOWN,
+                                    curses.KEY_LEFT, curses.KEY_RIGHT, curses.KEY_PPAGE,
+                                    curses.KEY_NPAGE):
+                    self.set_status("This is a read-only buffer.", timeout=2)
+                    continue
+
+            if key_code == CTRL_D:
+                self.show_git_diff()
+            elif key_code == CTRL_C:
                 self.perform_copy()
             elif key_code == CTRL_X:
                 # Tab Close Logic
