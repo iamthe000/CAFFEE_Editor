@@ -1070,6 +1070,7 @@ class EditorTab:
         self.mark_pos = None
         self.file_mtime = mtime
         self.current_syntax_rules = syntax_rules
+        self.git_status = None # Can be 'M' (modified), 'A' (added/untracked), or None
 
 class Editor:
     def __init__(self, stdscr, filename=None, start_time=None):
@@ -1087,6 +1088,8 @@ class Editor:
             self.config["colors"].update(user_config.pop("colors"))
         self.config.update(user_config)
 
+        self.git_branch = self._get_git_branch()
+
         # タブ管理の初期化
         self.tabs = []
         self.active_tab_idx = 0
@@ -1100,6 +1103,7 @@ class Editor:
         
         rules = self.detect_syntax(filename)
         first_tab = EditorTab(Buffer(initial_lines), filename, rules, mtime)
+        self._update_tab_git_status(first_tab)
         self.tabs.append(first_tab)
         
         # 最初のタブの履歴初期化
@@ -1256,6 +1260,7 @@ class Editor:
     def new_tab(self):
         """Open a new empty tab and switch to it"""
         new_tab = EditorTab(Buffer([""]), None, None, None)
+        self._update_tab_git_status(new_tab)
         self.tabs.append(new_tab)
         self.active_tab_idx = len(self.tabs) - 1
         self.save_history(init=True)
@@ -1566,6 +1571,51 @@ class Editor:
             except (curses.error, KeyboardInterrupt):
                 self.set_status("")
                 return False
+
+    def _get_git_branch(self):
+        """現在のGitブランチ名を取得する"""
+        try:
+            result = subprocess.run(
+                ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                capture_output=True, text=True, check=True, cwd=os.getcwd()
+            )
+            return result.stdout.strip()
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return None
+
+    def _get_git_file_status(self, filepath):
+        """Get the git status for a specific file."""
+        if not filepath or not self.git_branch:
+            return None
+
+        abs_path = os.path.abspath(filepath)
+        if not os.path.exists(abs_path):
+            return 'A'
+
+        repo_dir = os.path.dirname(abs_path)
+
+        try:
+            subprocess.run(
+                ['git', 'ls-files', '--error-unmatch', abs_path],
+                capture_output=True, text=True, cwd=repo_dir, check=True, stderr=subprocess.DEVNULL
+            )
+            diff_proc = subprocess.run(
+                ['git', 'diff-index', '--quiet', 'HEAD', '--', abs_path],
+                cwd=repo_dir
+            )
+            return 'M' if diff_proc.returncode == 1 else None
+        except FileNotFoundError:
+            self.git_branch = None
+            return None
+        except subprocess.CalledProcessError:
+            return 'A'
+
+    def _update_tab_git_status(self, tab):
+        """Update the git status for a specific tab."""
+        if self.git_branch:
+            tab.git_status = self._get_git_file_status(tab.filename)
+        else:
+            tab.git_status = None
 
     def _process_explorer_input(self, key_code, char_input):
         """Handles key presses when the file explorer is active."""
@@ -2120,7 +2170,8 @@ class Editor:
         focus_map = {'editor': 'EDT', 'explorer': 'EXP', 'terminal': 'TRM', 'full_screen_explorer': 'F-EXP'}
         focus_str = f"[{focus_map.get(self.active_pane, '---')}]"
 
-        header = f" {EDITOR_NAME} v{VERSION} | {self.filename or 'New Buffer'} {mod_char} | {syntax_name} | {focus_str} {mark_status}"
+        branch_info = f" ({self.git_branch})" if self.git_branch else ""
+        header = f" {EDITOR_NAME} v{VERSION}{branch_info} | {self.filename or 'New Buffer'} {mod_char} | {syntax_name} | {focus_str} {mark_status}"
         header = header.ljust(self.width)
         self.safe_addstr(1, 0, header, curses.color_pair(1) | curses.A_BOLD)
         self.header_height = 1
@@ -2179,7 +2230,12 @@ class Editor:
         for i, tab in enumerate(self.tabs):
             name = os.path.basename(tab.filename) if tab.filename else "untitled"
             mod = "*" if tab.modified else ""
-            display = f" {i+1}:{name}{mod} "
+
+            git_mod = ""
+            if tab.git_status == 'M': git_mod = "~"
+            elif tab.git_status == 'A': git_mod = "+"
+
+            display = f" {i+1}:{name}{mod}{git_mod} "
             
             pair = curses.color_pair(14) if i == self.active_tab_idx else curses.color_pair(15)
             self.safe_addstr(0, current_x, display, pair)
@@ -2437,6 +2493,7 @@ class Editor:
             
             self.current_syntax_rules = self.detect_syntax(self.filename)
             self.modified = False
+            self._update_tab_git_status(self.current_tab)
             self.save_history(init=True)
             self.set_status(f"Saved {len(self.buffer)} lines to {self.filename}.", timeout=3)
         except (IOError, OSError) as e:
@@ -2567,6 +2624,7 @@ class Editor:
             except OSError: pass
             rules = self.detect_syntax(filename)
             new_tab = EditorTab(Buffer(new_lines), filename, rules, mtime)
+            self._update_tab_git_status(new_tab)
             self.tabs.append(new_tab)
             self.active_tab_idx = len(self.tabs) - 1
             self.save_history(init=True)
