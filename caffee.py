@@ -11,6 +11,7 @@ import shutil
 import traceback
 import unicodedata
 import select
+import difflib
 import subprocess
 import time
 
@@ -1167,7 +1168,7 @@ class Editor:
             'qa': self._command_quit,
             'new': self._command_new,
             'set': self._command_set,
-            'diff': self.show_git_diff,
+            'diff': self.show_diff,
         }
 
         self.init_colors()
@@ -1597,32 +1598,78 @@ class Editor:
         except (subprocess.CalledProcessError, FileNotFoundError):
             return None
 
-    def _get_git_diff(self, filepath):
-        """Get the git diff for a specific file."""
-        if not filepath or not self.git_branch:
-            return ["Git repository not found or file not tracked."]
+    def _get_diff(self):
+        """
+        Generates a diff between the current buffer and the last saved state.
+        For git-tracked files, it diffs against HEAD.
+        For other files, it diffs against the version on disk.
+        For new files, it diffs against an empty state.
+        """
+        original_lines = []
+        is_git_tracked = False
 
-        try:
-            result = subprocess.run(
-                ['git', 'diff', 'HEAD', '--', filepath],
-                capture_output=True, text=True, cwd=os.getcwd()
-            )
-            if not result.stdout.strip():
-                return ["No changes since last commit."]
+        # 1. Determine if the file is tracked by Git
+        if self.filename and self.git_branch and os.path.exists(self.filename):
+            try:
+                # Check if the file is known to git
+                subprocess.run(
+                    ['git', 'ls-files', '--error-unmatch', self.filename],
+                    capture_output=True, text=True, check=True, stderr=subprocess.DEVNULL
+                )
+                is_git_tracked = True
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                is_git_tracked = False
+        
+        # 2. Get the original content
+        if is_git_tracked:
+            try:
+                # Fetch content from HEAD
+                result = subprocess.run(
+                    ['git', 'show', f"HEAD:{self.filename}"],
+                    capture_output=True, text=True
+                )
+                # git show can fail for new files that are added but not committed
+                if result.returncode == 0:
+                    original_lines = result.stdout.splitlines()
+                else: # Fallback for added, uncommitted files
+                    is_git_tracked = False 
+            except (FileNotFoundError):
+                 is_git_tracked = False # Git not found
+        
+        # Fallback for non-git files or git errors
+        if not is_git_tracked:
+            if self.filename and os.path.exists(self.filename):
+                try:
+                    with open(self.filename, 'r', encoding='utf-8') as f:
+                        original_lines = f.read().splitlines()
+                except (OSError, UnicodeDecodeError):
+                    return ["Error: Could not read original file from disk."]
+            else:
+                # This is a new, unsaved buffer. Original is empty.
+                original_lines = []
 
-            return result.stdout.splitlines()
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            return ["Could not get git diff."]
+        # 3. Get current buffer content
+        current_lines = self.buffer.get_content()
 
-    def show_git_diff(self):
+        # 4. Generate the diff
+        diff = list(difflib.unified_diff(
+            original_lines,
+            current_lines,
+            fromfile=f"a/{self.filename or 'untitled'}",
+            tofile=f"b/{self.filename or 'untitled'}",
+            lineterm='' # Avoid adding extra newlines
+        ))
+
+        if not diff:
+            return ["No changes."]
+        
+        return diff
+
+    def show_diff(self):
         """Show the git diff for the current file in a new tab."""
-        if not self.filename:
-            self.set_status("Cannot show diff for an unsaved file.", timeout=3)
-            return
+        diff_lines = self._get_diff()
 
-        diff_lines = self._get_git_diff(self.filename)
-
-        diff_tab_name = f"diff://{os.path.basename(self.filename)}"
+        diff_tab_name = f"diff://{os.path.basename(self.filename) if self.filename else 'untitled'}"
 
         # Check if a diff tab for this file already exists
         for i, tab in enumerate(self.tabs):
@@ -3056,7 +3103,7 @@ class Editor:
                     continue
 
             if key_code == CTRL_D:
-                self.show_git_diff()
+                self.show_diff()
             elif key_code == CTRL_C:
                 self.perform_copy()
             elif key_code == CTRL_X:
