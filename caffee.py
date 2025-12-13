@@ -79,9 +79,52 @@ DEFAULT_CONFIG = {
     "displayed_keybindings": [
         "close_tab", "new_start", "next_tab", "save", "cut", "paste", "search", 
         "undo", "redo", "copy", "build", "mark", "select_all", "goto", 
-        "delete_line", "comment", "explorer", "terminal", "line_end", "command"
+        "delete_line", "comment", "explorer", "terminal", "line_end", "command", "template"
     ],
     # --------------------------
+    "templates": {
+        "python": """def main():
+    print("Hello, world!")
+
+if __name__ == "__main__":
+    main()""",
+        "javascript": """function main() {
+    console.log('Hello, world!');
+}
+
+main();""",
+        "c_cpp": """#include <stdio.h>
+
+int main() {
+    printf("Hello, world!\\n");
+    return 0;
+}""",
+        "go": """package main
+
+import "fmt"
+
+func main() {
+    fmt.Println("Hello, world!")
+}""",
+        "rust": """fn main() {
+    println!("Hello, world!");
+}""",
+        "html": """<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Document</title>
+</head>
+<body>
+
+</body>
+</html>""",
+        "markdown": """# Title
+
+## Section
+
+- List item"""
+    },
     "colors": {
         "header_text": "BLACK",
         "header_bg": "WHITE",
@@ -144,10 +187,11 @@ DEFAULT_KEYBINDINGS = {
     "delete_line": {"key": "^Y", "label": "DelLine"},
     "comment": {"key": "^/", "label": "Comment"},
     "explorer": {"key": "^F", "label": "Explorer"},
-    "terminal": {"key": "^T", "label": "Terminal"},
+    "terminal": {"key": "^N", "label": "Terminal"},
     "line_end": {"key": "^E", "label": "LineEnd"},
     "command": {"key": "^P", "label": "Command"},
     "diff": {"key": "^D", "label": "Diff"},
+    "template": {"key": "^T", "label": "Template"},
 }
 
 # --- デフォルトのシンタックスハイライト定義 ---
@@ -1096,6 +1140,8 @@ class Editor:
         user_config, config_error = load_config()
         if "colors" in user_config and isinstance(user_config["colors"], dict):
             self.config["colors"].update(user_config.pop("colors"))
+        if "templates" in user_config and isinstance(user_config["templates"], dict):
+            self.config["templates"].update(user_config.pop("templates"))
         self.config.update(user_config)
 
         self.git_branch = self._get_git_branch()
@@ -1438,6 +1484,14 @@ class Editor:
             self.set_status(f"Build command for '{extension}' registered.", timeout=2)
         else:
             self.set_status(f"Invalid build command for '{extension}'.", timeout=4)
+
+    def register_template(self, language, template_string):
+        """プラグインから新しいテンプレートを登録する"""
+        if language and isinstance(template_string, str):
+            self.config['templates'][language] = template_string
+            self.set_status(f"Template for '{language}' registered.", timeout=2)
+        else:
+            self.set_status(f"Invalid template for '{language}'.", timeout=4)
             
     def get_cursor_position(self): return self.cursor_y, self.cursor_x
     def get_line_content(self, y): return self.buffer.lines[y] if 0 <= y < len(self.buffer) else ""
@@ -1792,6 +1846,86 @@ class Editor:
             self.set_status("Default setting.json created successfully.", timeout=3)
         except OSError as e:
             self.set_status(f"Error creating file: {e}", timeout=5)
+
+    def _select_and_insert_template(self):
+        """テンプレート選択メニューを表示し、選択されたテンプレートを挿入する"""
+        templates = self.config.get("templates", {})
+        if not templates:
+            self.set_status("No templates defined.", timeout=3)
+            return
+
+        languages = sorted(templates.keys())
+        selected_index = 0
+        scroll_offset = 0
+
+        original_pane = self.active_pane
+        self.active_pane = 'template_selector' # Special pane state
+
+        while True:
+            self.stdscr.erase()
+            # Draw a minimal background UI
+            self.draw_tab_bar()
+            self.draw_ui()
+
+            max_items = self.height - 8
+            
+            if selected_index < scroll_offset:
+                scroll_offset = selected_index
+            elif selected_index >= scroll_offset + max_items:
+                scroll_offset = selected_index - max_items + 1
+
+
+            title = "--- Select a Template ---"
+            
+            # Center the box
+            box_h = min(len(languages) + 4, max_items)
+            box_w = max(len(max(languages, key=len)) + 4, len(title) + 4)
+            box_y = self.height // 2 - box_h // 2
+            box_x = self.width // 2 - box_w // 2
+
+            # Simple box drawing
+            try:
+                for i in range(box_h):
+                    self.stdscr.addstr(box_y + i, box_x, " " * box_w, curses.color_pair(1))
+                self.safe_addstr(box_y + 1, box_x + (box_w - len(title)) // 2, title, curses.color_pair(1))
+            except curses.error: pass
+
+            for i in range(max_items):
+                idx = scroll_offset + i
+                if idx >= len(languages):
+                    break
+                
+                lang = languages[idx]
+                y = box_y + 3 + i
+                x = box_x + 2
+                
+                attr = curses.A_REVERSE if idx == selected_index else curses.color_pair(1)
+                self.safe_addstr(y, x, lang.ljust(box_w - 4), attr)
+
+            self.stdscr.refresh()
+
+            try:
+                ch = self.stdscr.getch()
+            except (curses.error, KeyboardInterrupt):
+                ch = -1
+
+            if ch == curses.KEY_UP:
+                selected_index = (selected_index - 1 + len(languages)) % len(languages)
+            elif ch == curses.KEY_DOWN:
+                selected_index = (selected_index + 1) % len(languages)
+            elif ch in (KEY_ENTER, KEY_RETURN):
+                selected_language = languages[selected_index]
+                template_string = templates[selected_language]
+                self.insert_text(template_string)
+                self.set_status(f"Inserted '{selected_language}' template.", timeout=3)
+                break
+            elif ch == KEY_ESC or ch == CTRL_C:
+                self.set_status("Template selection cancelled.", timeout=3)
+                break
+
+        self.active_pane = original_pane
+
+
     # ==========================================
 
     def insert_text(self, text):
@@ -2991,8 +3125,11 @@ class Editor:
             if key_code == CTRL_F:
                 self.toggle_explorer()
                 continue
-            elif key_code == CTRL_T:
+            elif key_code == CTRL_N:
                 self.toggle_terminal()
+                continue
+            elif key_code == CTRL_T:
+                self._select_and_insert_template()
                 continue
             elif key_code == CTRL_B:
                 self.run_build_command()
