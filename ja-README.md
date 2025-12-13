@@ -36,7 +36,8 @@ pip install caffee --upgrade
     - 隠しファイルの表示/非表示 (`h`キー)。
     - ワイルドカードで検索 (`/`キー)。
     - ファイル/ディレクトリの作成、削除、名前変更 (`a`, `d`, `r`キー)。
-- **組み込みターミナル** (`Ctrl+T`) - エディタから直接コマンドを実行。
+- **コードテンプレート** (`Ctrl+T`) - 言語固有のコードスニペットを挿入。
+- **組み込みターミナル** (`Ctrl+N`) - エディタから直接コマンドを実行。
 - **プラグイン & 設定マネージャー** - プラグインとエディタ設定を管理する対話的なメニュー。
 - **ビルド&実行** (`Ctrl+B`) - 様々な言語の自動コンパイルと実行。
 - **スマート横スクロール** - nanoスタイルの滑らかなスクロール。
@@ -119,7 +120,8 @@ caffee /path/to/file.py
 | キー | 動作 |
 |-----|------|
 | `Ctrl+F` | ファイルエクスプローラー切り替え |
-| `Ctrl+T` | 統合ターミナル切り替え |
+| `Ctrl+N` | 統合ターミナル切り替え |
+| `Ctrl+T` | テンプレートを挿入 |
 | `Ctrl+B` | 現在のファイルをビルド/実行 |
 | `Ctrl+D` | 現在のファイルのGit差分を表示 |
 | `Ctrl+P` | コマンドモードに入る |
@@ -156,6 +158,11 @@ caffee /path/to/file.py
   "backup_count": 5,
   "enable_predictive_text": true,
   
+  "templates": {
+    "python": "def main():\\n    print(\"Hello, world!\")\\n\\nif __name__ == \"__main__\":\\n    main()",
+    "javascript": "function main() {\\n    console.log('Hello, world!');\\n}\\n\\nmain();"
+  },
+
   "start_screen_mode": true,
   "show_explorer_default": true,
   "explorer_show_details": true,
