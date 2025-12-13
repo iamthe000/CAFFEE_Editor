@@ -36,7 +36,8 @@ pip install caffee --upgrade
     - Show/hide hidden files (`h` key).
     - Search with wildcards (`/` key).
     - Create, delete, and rename files/directories (`a`, `d`, `r` keys).
-- **Built-in Terminal** (`Ctrl+T`) - Execute commands directly from the editor.
+- **Code Templates** (`Ctrl+T`) - Insert language-specific code snippets.
+- **Built-in Terminal** (`Ctrl+N`) - Execute commands directly from the editor.
 - **Plugin & Settings Manager** - Interactive menus to manage plugins and editor settings.
 - **Build & Run** (`Ctrl+B`) - Automatic compilation and execution for various languages.
 - **Smart Horizontal Scrolling** - Nano-style smooth scrolling for long lines.
@@ -119,7 +120,8 @@ For significantly faster startup, compile with Nuitka. See the [Nuitka Compilati
 | Key | Action |
 |-----|--------|
 | `Ctrl+F` | Toggle file explorer |
-| `Ctrl+T` | Toggle integrated terminal |
+| `Ctrl+N` | Toggle integrated terminal |
+| `Ctrl+T` | Insert template |
 | `Ctrl+B` | Build/Run current file |
 | `Ctrl+D` | Show Git diff for the current file |
 | `Ctrl+P` | Enter Command Mode |
@@ -157,6 +159,11 @@ User settings are stored in `~/.caffee_setting/setting.json`. You can edit this 
   "backup_count": 5,
   "enable_predictive_text": true,
   
+  "templates": {
+    "python": "def main():\\n    print(\"Hello, world!\")\\n\\nif __name__ == \"__main__\":\\n    main()",
+    "javascript": "function main() {\\n    console.log('Hello, world!');\\n}\\n\\nmain();"
+  },
+
   "start_screen_mode": true,
   "show_explorer_default": true,
   "explorer_show_details": true,
