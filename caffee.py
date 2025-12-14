@@ -71,7 +71,7 @@ DEFAULT_CONFIG = {
     # --- UI Layout Settings ---
     "explorer_width": 50,
     "terminal_height": 10,
-    "explorer_icon_theme": "emoji", # "emoji" or "nerd_font"
+    "explorer_icon_theme": "nerd_font", # "emoji" or "nerd_font"
     "show_explorer_default": True,
     "show_terminal_default": True,
     "explorer_show_details": True, # エクスプローラーで日付やサイズを表示するか
@@ -147,7 +147,33 @@ echo "Hello, world!"
         "css": """body {
     font-family: sans-serif;
 }
-"""
+""",
+        "lua": """function main()
+    print("Hello, world!")
+end
+
+main()""",
+        "perl": """#!/usr/bin/perl
+use strict;
+use warnings;
+
+print "Hello, world!\\n";""",
+        "kotlin": """fun main() {
+    println("Hello, World!")
+}""",
+        "swift": """import Swift
+
+print("Hello, world!")""",
+        "dart": """void main() {
+  print('Hello, World!');
+}""",
+        "elixir": """defmodule Hello do
+  def world do
+    IO.puts "Hello, world!"
+  end
+end
+
+Hello.world()"""
     },
     "colors": {
         "header_text": "BLACK",
@@ -231,6 +257,12 @@ EMOJI_ICONS = {
     ".rb": "💎",
     ".php": "🐘",
     ".sh": "💲", ".bash": "💲",
+    ".lua": "🌙",
+    ".pl": "🐪", ".pm": "🐪",
+    ".kt": "🇰", ".kts": "🇰",
+    ".swift": "🐦",
+    ".dart": "🎯",
+    ".ex": "💧", ".exs": "💧",
     # Web
     ".html": "🌐", ".htm": "🌐",
     ".css": "🎨",
@@ -268,6 +300,12 @@ NERD_FONT_ICONS = {
     ".rb": "",
     ".php": "",
     ".sh": "", ".bash": "",
+    ".lua": "",
+    ".pl": "", ".pm": "",
+    ".kt": "", ".kts": "",
+    ".swift": "",
+    ".dart": "",
+    ".ex": "", ".exs": "",
     # Web
     ".html": "", ".htm": "",
     ".css": "",
@@ -386,6 +424,48 @@ DEFAULT_SYNTAX_RULES = {
         "comments": r"/\*[\s\S]*?\*/",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
         "numbers": r"#[0-9a-fA-F]{3,6}|\b\d+(:?px|em|%|pt|rem)\b"
+    },
+    "lua": {
+        "extensions": [".lua"],
+        "keywords": r"\b(and|break|do|else|elseif|end|false|for|function|if|in|local|nil|not|or|repeat|return|then|true|until|while)\b",
+        "comments": r"--.*",
+        "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
+        "numbers": r"\b\d+\b"
+    },
+    "perl": {
+        "extensions": [".pl", ".pm"],
+        "keywords": r"\b(my|our|local|sub|if|else|elsif|for|foreach|while|until|use|require|package|print|say)\b",
+        "comments": r"#.*",
+        "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
+        "numbers": r"\b\d+\b"
+    },
+    "kotlin": {
+        "extensions": [".kt", ".kts"],
+        "keywords": r"\b(fun|val|var|if|else|when|for|while|return|class|interface|package|import|true|false|null|object|is|in)\b",
+        "comments": r"//.*|/\*[\s\S]*?\*/",
+        "strings": r"(\".*?\")",
+        "numbers": r"\b\d+\b"
+    },
+    "swift": {
+        "extensions": [".swift"],
+        "keywords": r"\b(let|var|func|if|else|for|in|while|switch|case|return|class|struct|enum|protocol|import|true|false|nil|public|private|internal|fileprivate|open)\b",
+        "comments": r"//.*|/\*[\s\S]*?\*/",
+        "strings": r"(\".*?\")",
+        "numbers": r"\b\d+\b"
+    },
+    "dart": {
+        "extensions": [".dart"],
+        "keywords": r"\b(var|final|const|if|else|for|in|while|do|switch|case|break|continue|return|void|import|as|show|hide|true|false|null|class|extends|with|implements|enum|mixin)\b",
+        "comments": r"//.*|/\*[\s\S]*?\*/",
+        "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
+        "numbers": r"\b\d+\b"
+    },
+    "elixir": {
+        "extensions": [".ex", ".exs"],
+        "keywords": r"\b(def|defmodule|defp|if|else|case|cond|fn|end|true|false|nil|do|require|alias|import|use|with)\b|:\w+",
+        "comments": r"#.*",
+        "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
+        "numbers": r"\b\d+\b"
     }
 }
 
@@ -403,7 +483,15 @@ DEFAULT_BUILD_COMMANDS = {
     ".php": "php -S localhost:8000 \"{filename}\"",
     ".ts": "ts-node \"{filename}\"",
     ".tsx": "ts-node \"{filename}\"",
-    ".bash": "bash \"{filename}\""
+    ".bash": "bash \"{filename}\"",
+    ".lua": "lua \"{filename}\"",
+    ".pl": "perl \"{filename}\"",
+    ".kt": "kotlinc \"{filename}\" -include-runtime -d \"{base}\".jar && java -jar \"{base}\".jar",
+    ".kts": "kotlin \"{filename}\"",
+    ".swift": "swift \"{filename}\"",
+    ".dart": "dart run \"{filename}\"",
+    ".ex": "elixir \"{filename}\"",
+    ".exs": "elixir \"{filename}\""
 }
 
 
