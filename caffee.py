@@ -14,6 +14,8 @@ import select
 import difflib
 import subprocess
 import time
+import urllib.request
+import platform
 
 # --- 定数定義 (Key Codes) ---
 CTRL_A = 1
@@ -1473,6 +1475,9 @@ class Editor:
 
         self.init_colors()
 
+        # Check for Nerd Font support after colors are initialized
+        self._check_nerd_font_support()
+
         if config_error:
             self.set_status(config_error, timeout=5)
         elif load_err:
@@ -1747,6 +1752,100 @@ class Editor:
         else:
             self.set_status(f"Invalid template for '{language}'.", timeout=4)
             
+    def _update_and_save_user_config(self, updates):
+        """Updates and saves specific keys to setting.json"""
+        setting_dir = get_config_dir()
+        setting_file = os.path.join(setting_dir, "setting.json")
+        user_config = {}
+
+        if os.path.exists(setting_file):
+            try:
+                with open(setting_file, 'r', encoding='utf-8') as f:
+                    user_config = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        user_config.update(updates)
+
+        try:
+            with open(setting_file, 'w', encoding='utf-8') as f:
+                json.dump(user_config, f, indent=4, ensure_ascii=False)
+        except OSError:
+            pass
+
+    def _install_nerd_font(self):
+        """Downloads and installs Hack Nerd Font for the current user."""
+        font_url = "https://github.com/ryanoasis/nerd-fonts/raw/master/patched-fonts/Hack/Regular/HackNerdFont-Regular.ttf"
+        font_filename = "HackNerdFont-Regular.ttf"
+        system = platform.system()
+        font_dir = ""
+
+        if system == "Linux":
+            font_dir = os.path.join(os.path.expanduser("~"), ".local", "share", "fonts")
+        elif system == "Darwin": # macOS
+            font_dir = os.path.join(os.path.expanduser("~"), "Library", "Fonts")
+        else:
+            self._draw_message("Automatic font installation not supported on this OS.", 5)
+            return
+
+        os.makedirs(font_dir, exist_ok=True)
+        font_path = os.path.join(font_dir, font_filename)
+
+        self._draw_message(f"Downloading {font_filename}...", delay_seconds=1)
+        try:
+            with urllib.request.urlopen(font_url) as response, open(font_path, 'wb') as out_file:
+                shutil.copyfileobj(response, out_file)
+            
+            if system == "Linux":
+                self._draw_message("Updating font cache...", delay_seconds=1)
+                try:
+                    subprocess.run(['fc-cache', '-f', '-v'], check=True, capture_output=True)
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    self._draw_message("fc-cache failed. Please run it manually.", 5)
+            
+            self._draw_message("Font installed! Please set it in your terminal settings.", 5)
+        except Exception as e:
+            self._draw_message(f"Error installing font: {e}", 5)
+
+    def _draw_message(self, message, delay_seconds=0):
+        """Helper to draw a centered message and wait."""
+        self.stdscr.clear()
+        y = self.height // 2
+        x = self.width // 2 - len(message) // 2
+        try:
+            # Use color pair 3 (linenum_text) for visibility
+            self.safe_addstr(y, x, message, curses.color_pair(3))
+            self.stdscr.refresh()
+            if delay_seconds > 0:
+                time.sleep(delay_seconds)
+        except curses.error:
+            pass
+
+    def _check_nerd_font_support(self):
+        """Checks for Nerd Font support and offers installation."""
+        if self.config.get("nerd_font_check_done"):
+            return
+
+        use_nerd_font = self._prompt_for_confirmation("Enable Nerd Font icons? (Requires a Nerd Font installed) (y/n)")
+        
+        updates_to_save = {"nerd_font_check_done": True}
+
+        if use_nerd_font:
+            self.config["explorer_icon_theme"] = "nerd_font"
+            updates_to_save["explorer_icon_theme"] = "nerd_font"
+        else:
+            install_font = self._prompt_for_confirmation("Download and install Hack Nerd Font? (y/n)")
+            if install_font:
+                self._install_nerd_font()
+                self.config["explorer_icon_theme"] = "nerd_font"
+                updates_to_save["explorer_icon_theme"] = "nerd_font"
+            else:
+                self.config["explorer_icon_theme"] = "emoji"
+                updates_to_save["explorer_icon_theme"] = "emoji"
+
+        self._update_and_save_user_config(updates_to_save)
+        self.stdscr.clear()
+
     def get_cursor_position(self): return self.cursor_y, self.cursor_x
     def get_line_content(self, y): return self.buffer.lines[y] if 0 <= y < len(self.buffer) else ""
     def get_buffer_lines(self): return self.buffer.get_content()
