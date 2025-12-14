@@ -71,6 +71,7 @@ DEFAULT_CONFIG = {
     # --- UI Layout Settings ---
     "explorer_width": 50,
     "terminal_height": 10,
+    "explorer_icon_theme": "emoji", # "emoji" or "nerd_font"
     "show_explorer_default": True,
     "show_terminal_default": True,
     "explorer_show_details": True, # エクスプローラーで日付やサイズを表示するか
@@ -123,7 +124,30 @@ func main() {
 
 ## Section
 
-- List item"""
+- List item""",
+        "java": """public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello, world!");
+    }
+}""",
+        "ruby": """puts "Hello, world!""",
+        "php": """<?php
+
+echo "Hello, world!";
+""",
+        "typescript": """function main(): void {
+    console.log('Hello, world!');
+}
+
+main();""",
+        "shell": """#!/bin/bash
+
+echo "Hello, world!"
+""",
+        "css": """body {
+    font-family: sans-serif;
+}
+"""
     },
     "colors": {
         "header_text": "BLACK",
@@ -194,6 +218,78 @@ DEFAULT_KEYBINDINGS = {
     "template": {"key": "^T", "label": "Template"},
 }
 
+# --- File Icons for Explorer ---
+EMOJI_ICONS = {
+    # Programming languages
+    ".py": "🐍", ".pyc": "🐍",
+    ".js": "📜", ".mjs": "📜", ".cjs": "📜",
+    ".ts": "📜", ".tsx": "📜",
+    ".java": "☕", ".class": "☕",
+    ".c": "🇨", ".h": "🇭", ".cpp": "🇨", ".hpp": "🇭",
+    ".go": "🐹",
+    ".rs": "🦀",
+    ".rb": "💎",
+    ".php": "🐘",
+    ".sh": "💲", ".bash": "💲",
+    # Web
+    ".html": "🌐", ".htm": "🌐",
+    ".css": "🎨",
+    ".json": "📦",
+    # Markup & Text
+    ".md": "📝", ".markdown": "📝",
+    ".txt": "📄",
+    # Config
+    ".toml": "⚙️", ".yaml": "⚙️", ".yml": "⚙️",
+    ".ini": "⚙️", ".conf": "⚙️", ".cfg": "⚙️",
+    # Git
+    ".git": "🌿", ".gitignore": "🌿",
+    # Data & Docs
+    ".csv": "📊",
+    ".pdf": "📕",
+    # Compressed
+    ".zip": "📦", ".tar": "📦", ".gz": "📦", ".rar": "📦",
+    # Images
+    ".png": "🖼️", ".jpg": "🖼️", ".jpeg": "🖼️", ".gif": "🖼️", ".svg": "🖼️",
+}
+
+NERD_FONT_ICONS = {
+    # Default icons
+    "file": "",
+    "dir": "",
+    "up": "",
+    # Programming languages
+    ".py": "", ".pyc": "",
+    ".js": "", ".mjs": "", ".cjs": "",
+    ".ts": "", ".tsx": "",
+    ".java": "", ".class": "",
+    ".c": "", ".h": "", ".cpp": "", ".hpp": "",
+    ".go": "",
+    ".rs": "",
+    ".rb": "",
+    ".php": "",
+    ".sh": "", ".bash": "",
+    # Web
+    ".html": "", ".htm": "",
+    ".css": "",
+    ".json": "",
+    # Markup & Text
+    ".md": "", ".markdown": "",
+    ".txt": "",
+    # Config
+    ".toml": "", ".yaml": "", ".yml": "",
+    ".ini": "", ".conf": "", ".cfg": "",
+    # Git
+    ".git": "", ".gitignore": "",
+    # Data & Docs
+    ".csv": "",
+    ".pdf": "",
+    # Compressed
+    ".zip": "", ".tar": "", ".gz": "", ".rar": "",
+    # Images
+    ".png": "", ".jpg": "", ".jpeg": "", ".gif": "", ".svg": "",
+}
+
+
 # --- デフォルトのシンタックスハイライト定義 ---
 DEFAULT_SYNTAX_RULES = {
     "python": {
@@ -248,6 +344,48 @@ DEFAULT_SYNTAX_RULES = {
     "diff": {
         "extensions": [],
         "language_name": "diff"
+    },
+    "java": {
+        "extensions": [".java"],
+        "keywords": r"\b(abstract|continue|for|new|switch|assert|default|goto|package|synchronized|boolean|do|if|private|this|break|double|implements|protected|throw|byte|else|import|public|throws|case|enum|instanceof|return|transient|catch|extends|int|short|try|char|final|interface|static|void|class|finally|long|strictfp|volatile|const|float|native|super|while|true|false|null)\b",
+        "comments": r"//.*|/\*[\s\S]*?\*/",
+        "strings": r"(\".*?\")",
+        "numbers": r"\b\d+\b"
+    },
+    "ruby": {
+        "extensions": [".rb"],
+        "keywords": r"\b(BEGIN|END|alias|and|begin|break|case|class|def|defined|do|else|elsif|end|ensure|false|for|if|in|module|next|nil|not|or|redo|rescue|retry|return|self|super|then|true|undef|unless|until|when|while|yield|__FILE__|__LINE__)\b",
+        "comments": r"#.*",
+        "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
+        "numbers": r"\b\d+\b"
+    },
+    "php": {
+        "extensions": [".php"],
+        "keywords": r"\b(abstract|and|array|as|break|case|catch|class|clone|const|continue|declare|default|die|do|echo|else|elseif|empty|enddeclare|endfor|endforeach|endif|endswitch|endwhile|eval|exit|extends|final|for|foreach|function|global|if|implements|include|include_once|instanceof|interface|isset|list|namespace|new|or|print|private|protected|public|require|require_once|return|static|switch|throw|try|unset|use|var|while|xor|__FILE__|__LINE__|__DIR__|__FUNCTION__|__CLASS__|__METHOD__|__NAMESPACE__)\b",
+        "comments": r"//.*|#.*|/\*[\s\S]*?\*/",
+        "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
+        "numbers": r"\b\d+\b"
+    },
+    "typescript": {
+        "extensions": [".ts", ".tsx"],
+        "keywords": r"\b(break|case|catch|class|const|continue|debugger|default|delete|do|else|enum|export|extends|false|finally|for|function|if|import|in|instanceof|new|null|return|super|switch|this|throw|true|try|typeof|var|void|while|with|as|implements|interface|let|package|private|protected|public|static|yield|any|boolean|constructor|declare|get|module|require|number|set|string|symbol|type|from|of)\b",
+        "comments": r"//.*|/\*[\s\S]*?\*/",
+        "strings": r"(['\"`])(?:(?<!\\)\1|.)*?\1",
+        "numbers": r"\b\d+\b"
+    },
+    "shell": {
+        "extensions": [".sh", ".bash"],
+        "keywords": r"\b(if|then|else|elif|fi|case|esac|for|select|while|until|do|done|in|function|time|coproc|true|false|echo|read|unset|export|declare|let|eval|exec|set|shift|trap|exit|return|break|continue)\b",
+        "comments": r"#.*",
+        "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
+        "numbers": r"\b\d+\b"
+    },
+    "css": {
+        "extensions": [".css"],
+        "keywords": r"([a-zA-Z-]+)\s*:",
+        "comments": r"/\*[\s\S]*?\*/",
+        "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
+        "numbers": r"#[0-9a-fA-F]{3,6}|\b\d+(:?px|em|%|pt|rem)\b"
     }
 }
 
@@ -259,7 +397,13 @@ DEFAULT_BUILD_COMMANDS = {
     ".cpp": "g++ \"{filename}\" -o \"{base}\" && \"./{base}\"",
     ".cc": "g++ \"{filename}\" -o \"{base}\" && \"./{base}\"",
     ".sh": "bash \"{filename}\"",
-    ".rs": "rustc \"{filename}\" && \"./{base}\""
+    ".rs": "rustc \"{filename}\" && \"./{base}\"",
+    ".java": "javac \"{filename}\" && java \"{base}\"",
+    ".rb": "ruby \"{filename}\"",
+    ".php": "php -S localhost:8000 \"{filename}\"",
+    ".ts": "ts-node \"{filename}\"",
+    ".tsx": "ts-node \"{filename}\"",
+    ".bash": "bash \"{filename}\""
 }
 
 
@@ -935,6 +1079,10 @@ class FileExplorer:
         elif self.selected_index >= self.scroll_offset + list_h:
             self.scroll_offset = self.selected_index - list_h + 1
 
+        # --- Icon Theme Setup (Moved out of loop for performance) ---
+        icon_theme = self.editor.config.get("explorer_icon_theme", "emoji")
+        icons = self.editor.nerd_font_icons if icon_theme == "nerd_font" else self.editor.emoji_icons
+
         for i in range(list_h):
             idx = self.scroll_offset + i
             if idx >= len(self.files): break
@@ -947,12 +1095,28 @@ class FileExplorer:
             attr = colors["dir"] if is_dir else colors["file"]
             if idx == self.selected_index:
                 attr |= curses.A_REVERSE
+            
+            # --- Icon Logic ---
+            icon = ""
+            if f_name == "..":
+                icon = icons.get("up", "⬆️")
+            elif is_dir:
+                icon = icons.get("dir", "📁")
+            else:
+                _, ext = os.path.splitext(f_name)
+                # Check for full filename match first (e.g. '.git', '.gitignore')
+                if f_name in icons:
+                    icon = icons[f_name]
+                elif ext and ext.lower() in icons:
+                    icon = icons[ext.lower()]
+            
+            # Fallback to default file icon if no specific icon was found
+            if not icon:
+                icon = icons.get("file", "📄")
 
-            prefix = "📁" if is_dir else "📄"
-            if f_name == "..": prefix = "⬆️"
 
             # --- 各列の情報を準備 ---
-            name_col = f" {prefix} {f_name}"
+            name_col = f" {icon} {f_name}"
             mtime_col = ""
             size_col = ""
 
@@ -1132,6 +1296,8 @@ class Editor:
         self.config = DEFAULT_CONFIG.copy()
         self.syntax_rules = DEFAULT_SYNTAX_RULES.copy()
         self.build_commands = DEFAULT_BUILD_COMMANDS.copy()
+        self.emoji_icons = EMOJI_ICONS.copy()
+        self.nerd_font_icons = NERD_FONT_ICONS.copy()
 
         # プラグインをロードして、カスタム設定とシンタックスを登録
         self.load_plugins()
