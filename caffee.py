@@ -72,7 +72,7 @@ DEFAULT_CONFIG = {
     # --------------------------
     # --- UI Layout Settings ---
     "explorer_width": 50,
-    "terminal_height": 10,
+    "terminal_height": 7,
     "explorer_icon_theme": "nerd_font", # "emoji" or "nerd_font"
     "show_explorer_default": True,
     "show_terminal_default": True,
