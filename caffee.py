@@ -34,6 +34,7 @@ CTRL_R = 18
 CTRL_S = 19 # New Tab / Start Screen
 CTRL_T = 20
 CTRL_U = 21
+CTRL_V = 22
 CTRL_W = 23
 CTRL_X = 24 # Close Tab / Exit
 CTRL_Y = 25
@@ -77,12 +78,13 @@ DEFAULT_CONFIG = {
     "show_explorer_default": True,
     "show_terminal_default": True,
     "explorer_show_details": True, # エクスプローラーで日付やサイズを表示するか
+    "show_relative_linenum": False, # 相対行数を表示するか
     # --------------------------
     # --- Keybinding Display ---
     "displayed_keybindings": [
-        "close_tab", "new_start", "next_tab", "save", "cut", "paste", "search", 
-        "undo", "redo", "copy", "build", "mark", "select_all", "goto", 
-        "delete_line", "comment", "explorer", "terminal", "line_end", "command", "template"
+        "close_tab", "new_start", "next_tab", "save", "cut", "paste", "search",
+        "undo", "redo", "copy", "build", "mark", "select_all", "goto",
+        "delete_line", "comment", "explorer", "terminal", "line_end", "command", "template", "relative_linenum"
     ],
     # --------------------------
     "templates": {
@@ -244,6 +246,7 @@ DEFAULT_KEYBINDINGS = {
     "command": {"key": "^P", "label": "Command"},
     "diff": {"key": "^D", "label": "Diff"},
     "template": {"key": "^T", "label": "Template"},
+    "relative_linenum": {"key": "^V", "label": "RelNum"},
 }
 
 # --- File Icons for Explorer ---
@@ -2608,7 +2611,21 @@ class Editor:
             if file_line_idx >= len(self.buffer):
                 self.safe_addstr(draw_y, edit_x, "~", curses.color_pair(3))
             else:
-                ln_str = str(file_line_idx + 1).rjust(linenum_width - 1) + " "
+                # --- 相対行数表示の処理 ---
+                show_relative = self.config.get("show_relative_linenum", False)
+                ln_str = ""
+                if show_relative:
+                    if file_line_idx == self.cursor_y:
+                        # カーソル行は絶対行数を表示
+                        ln_str = str(file_line_idx + 1).rjust(linenum_width - 1) + " "
+                    else:
+                        # それ以外は相対行数を表示
+                        relative_num = abs(file_line_idx - self.cursor_y)
+                        ln_str = str(relative_num).rjust(linenum_width - 1) + " "
+                else:
+                    # 通常の絶対行数表示
+                    ln_str = str(file_line_idx + 1).rjust(linenum_width - 1) + " "
+                
                 self.safe_addstr(draw_y, edit_x, ln_str, curses.color_pair(3))
                 
                 line = self.buffer[file_line_idx]
@@ -3148,6 +3165,13 @@ class Editor:
             self.active_pane = 'terminal'
         self.redraw_screen()
 
+    def toggle_relative_linenum(self):
+        """相対行数表示のオン/オフを切り替える"""
+        current_state = self.config.get("show_relative_linenum", False)
+        self.config["show_relative_linenum"] = not current_state
+        status = "ON" if not current_state else "OFF"
+        self.set_status(f"Relative line numbers: {status}", timeout=2)
+
     def run_build_command(self):
         if not self.filename:
             self.set_status("Cannot run: No filename provided.")
@@ -3489,6 +3513,9 @@ class Editor:
                 continue
             elif key_code == CTRL_S:
                 self.new_tab()
+                continue
+            elif key_code == CTRL_V:
+                self.toggle_relative_linenum()
                 continue
             elif key_code == CTRL_L:
                 self.next_tab()
