@@ -1924,23 +1924,7 @@ class Editor:
         self.stdscr.refresh()
 
     def prompt_user(self, prompt_msg, default_value=""):
-        self.set_status_message(prompt_msg, timeout=60)
-        self.draw_ui()
-        curses.echo()
-        result = None
-        try:
-            status_y = self.height - self.menu_height - 1
-            self.safe_addstr(status_y, 0, prompt_msg.ljust(self.width), curses.color_pair(2))
-            start_x = min(len(prompt_msg), self.width - 1)
-            inp_bytes = self.stdscr.getstr(status_y, start_x)
-            result = inp_bytes.decode('utf-8')
-        except Exception:
-            result = None
-        finally:
-            curses.noecho()
-            self.status_message = ""
-            self.redraw_screen()
-        return result
+        return self._prompt_for_input(prompt_msg, default_text=default_value)
 
     def _prompt_for_input(self, prompt_msg, default_text=""):
         """Draws a prompt on the status bar and waits for user text input."""
@@ -2988,17 +2972,8 @@ class Editor:
         self.status_message = "Deleted line."
         
     def search_text(self):
-        self.set_status("Search (Regex): ", timeout=30)
-        self.draw_ui()
-        curses.echo()
-        status_y = self.height - self.menu_height - 1
-        try: 
-            query = self.stdscr.getstr(status_y, len("Search (Regex): ")).decode('utf-8')
-        except Exception:
-            query = ""
-        curses.noecho()
-        
-        if not query: 
+        query = self._prompt_for_input("Search (Regex): ")
+        if query is None:
             self.set_status("Search aborted.", timeout=2)
             return
 
@@ -3053,18 +3028,10 @@ class Editor:
 
     def save_file(self):
         if not self.filename:
-            self.set_status("Filename: ", timeout=10)
-            self.draw_ui()
-            curses.echo()
-            status_y = self.height - self.menu_height - 1
-            try: 
-                fn = self.stdscr.getstr(status_y, len("Filename: ")).decode('utf-8')
-            except Exception:
-                fn = ""
-            curses.noecho()
-            if fn.strip(): 
+            fn = self._prompt_for_input("Filename: ")
+            if fn is not None and fn.strip():
                 self.filename = fn.strip()
-            else: 
+            else:
                 self.set_status("Aborted", timeout=2)
                 return
 
@@ -3125,21 +3092,16 @@ class Editor:
             self.set_status("Selected all.", timeout=2)
 
     def goto_line(self):
-        self.set_status("Goto line: ", timeout=10)
-        self.draw_ui()
-        curses.echo()
-        status_y = self.height - self.menu_height - 1
-        try:
-            s = self.stdscr.getstr(status_y, len("Goto line: ")).decode('utf-8')
-        except Exception:
-            s = ""
-        curses.noecho()
-        try:
-            n = int(s.strip())
-            self.move_cursor(max(0, min(n - 1, len(self.buffer) - 1)), 0, update_desired_x=True)
-            self.set_status(f"Goto {n}", timeout=2)
-        except ValueError:
-            self.set_status("Invalid line number.", timeout=2)
+        s = self._prompt_for_input("Goto line: ")
+        if s is not None:
+            try:
+                n = int(s.strip())
+                self.move_cursor(max(0, min(n - 1, len(self.buffer) - 1)), 0, update_desired_x=True)
+                self.set_status(f"Goto {n}", timeout=2)
+            except ValueError:
+                self.set_status("Invalid line number.", timeout=2)
+        else:
+            self.set_status("Goto aborted.", timeout=2)
 
     def toggle_explorer(self):
         if self.show_explorer:
@@ -3594,7 +3556,7 @@ class Editor:
                 elif key_code == KEY_ENTER or key_code == KEY_RETURN:
                     self.terminal.write_input("\n")
                 elif key_code in (KEY_BACKSPACE, KEY_BACKSPACE2):
-                    self.terminal.write_input("\x08")
+                    self.terminal.write_input("\x7f") # DEL
                 elif key_code == KEY_TAB:
                     self.terminal.write_input("\t")
                 elif key_code == CTRL_C:
