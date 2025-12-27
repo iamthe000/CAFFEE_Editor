@@ -57,7 +57,7 @@ except ImportError:
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "2.5.1"
+VERSION = "2.5.2"
 DEFAULT_CONFIG = {
     "tab_width": 4,
     "history_limit": 50,
@@ -831,7 +831,7 @@ class SettingsManager:
     def handle_edit_input(self, char_code):
         if char_code in (KEY_ENTER, KEY_RETURN):
             self.apply_edit()
-        elif char_code in (KEY_BACKSPACE, KEY_BACKSPACE2):
+        elif char_code in (curses.KEY_BACKSPACE, KEY_BACKSPACE, KEY_BACKSPACE2):
             self.edit_buffer = self.edit_buffer[:-1]
         elif char_code == KEY_ESC:
             self.edit_mode = False
@@ -1957,7 +1957,7 @@ class Editor:
             elif key_code == KEY_ESC or key_code == CTRL_C:
                 self.set_status("")
                 return None # Cancelled
-            elif key_code in (KEY_BACKSPACE, KEY_BACKSPACE2):
+            elif key_code in (curses.KEY_BACKSPACE, KEY_BACKSPACE, KEY_BACKSPACE2):
                 buffer = buffer[:-1]
             elif char_input:
                 buffer += char_input
@@ -3555,7 +3555,7 @@ class Editor:
                     self.terminal.write_input(char_input)
                 elif key_code == KEY_ENTER or key_code == KEY_RETURN:
                     self.terminal.write_input("\n")
-                elif key_code in (KEY_BACKSPACE, KEY_BACKSPACE2):
+                elif key_code in (curses.KEY_BACKSPACE, KEY_BACKSPACE, KEY_BACKSPACE2):
                     self.terminal.write_input("\x7f") # DEL
                 elif key_code == KEY_TAB:
                     self.terminal.write_input("\t")
