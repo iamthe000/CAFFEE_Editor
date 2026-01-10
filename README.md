@@ -9,7 +9,8 @@
 </div>
 
 <div align="center">
-
+【Celebration】 PyPI total downloads exceeded 5K! 🎉
+    
 [![PyPI Version](https://img.shields.io/pypi/v/caffee.svg)](https://pypi.org/project/caffee/)
 [![Python Version](https://img.shields.io/pypi/pyversions/caffee.svg)](https://pypi.org/project/caffee/)
 [![License](https://img.shields.io/pypi/l/caffee.svg)](https://github.com/iamthe000/CAFFEE_Editor/blob/main/LICENSE)
