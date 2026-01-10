@@ -80,6 +80,7 @@ DEFAULT_CONFIG = {
     "explorer_show_details": True, # エクスプローラーで日付やサイズを表示するか
     "show_relative_linenum": False, # 相対行数を表示するか
     "show_breadcrumb": True, # ファイルパスやシンボルを表示するか
+    "vim_mode": False, # vimモードを有効にするか
     # --------------------------
     # --- Keybinding Display ---
     "displayed_keybindings": [
@@ -1421,6 +1422,11 @@ class Editor:
             self.config["templates"].update(user_config.pop("templates"))
         self.config.update(user_config)
 
+        self.vim_mode = self.config.get("vim_mode", False)
+        self.vim_state = 'normal' if self.vim_mode else 'insert'
+        self.vim_last_key = None
+        self.vim_clipboard_type = 'char' # 'char' or 'line'
+
         self.git_branch = self._get_git_branch()
 
         # タブ管理の初期化
@@ -2214,6 +2220,51 @@ class Editor:
             tab.git_status = self._get_git_file_status(tab.filename)
         else:
             tab.git_status = None
+
+    def _process_vim_input(self, key_code, char_input):
+        """vimモードのキー入力を処理する"""
+        if self.vim_state == 'normal':
+            # Handle 'yy' command
+            if self.vim_last_key == 'y' and char_input == 'y':
+                self.clipboard = [self.buffer.lines[self.cursor_y]]
+                self.vim_clipboard_type = 'line'
+                self.set_status("Yanked 1 line", timeout=2)
+                self.vim_last_key = None
+                return
+            # Handle 'dd' command
+            if self.vim_last_key == 'd' and char_input == 'd':
+                self.clipboard = [self.buffer.lines[self.cursor_y]]
+                self.vim_clipboard_type = 'line'
+                self.delete_line()
+                self.vim_last_key = None
+                return
+
+            # Reset sequence if another key is pressed
+            self.vim_last_key = None
+
+            if char_input == 'h':
+                self.move_cursor(self.cursor_y, self.cursor_x - 1, update_desired_x=True)
+            elif char_input == 'j':
+                self.move_cursor(self.cursor_y + 1, self.desired_x)
+            elif char_input == 'k':
+                self.move_cursor(self.cursor_y - 1, self.desired_x)
+            elif char_input == 'l':
+                self.move_cursor(self.cursor_y, self.cursor_x + 1, update_desired_x=True)
+            elif char_input == 'i':
+                self.vim_state = 'insert'
+            elif char_input == 'd':
+                self.vim_last_key = 'd' # Start of a sequence
+            elif char_input == 'y':
+                self.vim_last_key = 'y'
+            elif char_input == 'p':
+                if self.clipboard:
+                    self.save_history()
+                    if self.vim_clipboard_type == 'line':
+                        self.buffer.lines[self.cursor_y+1:self.cursor_y+1] = self.clipboard
+                        self.move_cursor(self.cursor_y + 1, 0, update_desired_x=True)
+                    else:
+                        self.perform_paste()
+                    self.modified = True
 
     def _process_explorer_input(self, key_code, char_input):
         """Handles key presses when the file explorer is active."""
@@ -3053,13 +3104,25 @@ class Editor:
                 self.status_expire_time = None
         
         pos_info = f" {self.cursor_y + 1}:{self.cursor_x + 1} "
-        max_msg_len = self.width - len(pos_info) - 1
+        
+        vim_status_str = ""
+        if self.vim_mode:
+            vim_status_str = f" -- {self.vim_state.upper()} -- "
+
+        max_msg_len = self.width - len(pos_info) - len(vim_status_str) - 1
         if len(display_msg) > max_msg_len:
             display_msg = display_msg[:max_msg_len]
             
         self.safe_addstr(status_y, 0, " " * self.width, curses.color_pair(2))
         self.safe_addstr(status_y, 0, display_msg, curses.color_pair(2))
-        self.safe_addstr(status_y, self.width - len(pos_info), pos_info, curses.color_pair(1))
+        
+        # Draw vim status then position
+        right_status_x = self.width - len(pos_info)
+        self.safe_addstr(status_y, right_status_x, pos_info, curses.color_pair(1))
+        
+        if vim_status_str:
+            right_status_x -= len(vim_status_str)
+            self.safe_addstr(status_y, right_status_x, vim_status_str, curses.color_pair(1))
 
     def draw_tab_bar(self):
         """Draws the tab bar at the top of the screen"""
@@ -3790,6 +3853,14 @@ class Editor:
                 elif key_code == curses.KEY_RIGHT: self.terminal.write_input("\x1b[C")
                 elif key_code == curses.KEY_LEFT: self.terminal.write_input("\x1b[D")
                 
+                continue
+
+            if self.vim_mode and self.vim_state == 'insert' and key_code == KEY_ESC:
+                self.vim_state = 'normal'
+                continue
+
+            if self.vim_mode and self.vim_state != 'insert' and self.active_pane == 'editor':
+                self._process_vim_input(key_code, char_input)
                 continue
 
             if key_code in self.plugin_key_bindings:
