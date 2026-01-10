@@ -206,7 +206,15 @@ Hello.world()"""
         "tab_inactive_bg": "DEFAULT",
         # --- Git Diff Colors ---
         "diff_add": "GREEN",
-        "diff_remove": "RED"
+        "diff_remove": "RED",
+        # --- Breadcrumb Colors ---
+        "breadcrumb_text": "BLACK",
+        "breadcrumb_bg": "WHITE",
+        # --- Search UI Colors ---
+        "search_bg": "WHITE",
+        "search_text": "BLACK",
+        "search_highlight_bg": "YELLOW",
+        "active_search_highlight_bg": "MAGENTA"
     }
 }
 
@@ -1464,6 +1472,14 @@ class Editor:
         self.selected_suggestion_idx = 0
         self.suggestion_word_start = None # (y, x) 補完中の単語の開始位置
 
+        # --- 検索・置換の状態 ---
+        self.search_mode = False
+        self.search_query = ""
+        self.replace_query = ""
+        self.search_results = [] # list of (y, start_x, end_x)
+        self.active_search_idx = -1
+        self.search_input_focused = "search" # "search" or "replace"
+
         self.height, self.width = stdscr.getmaxyx()
         
         self.plugin_key_bindings = {}
@@ -1658,6 +1674,13 @@ class Editor:
                 curses.init_pair(16, self._get_color(c.get("diff_add", "GREEN")), -1)
                 curses.init_pair(17, self._get_color(c.get("diff_remove", "RED")), -1)
 
+                # Breadcrumb Color
+                curses.init_pair(18, self._get_color(c.get("breadcrumb_text", "BLACK")), self._get_color(c.get("breadcrumb_bg", "WHITE")))
+
+                # Search UI Colors
+                curses.init_pair(19, self._get_color(c.get("search_text", "BLACK")), self._get_color(c.get("search_bg", "WHITE")))
+                curses.init_pair(20, COLOR_MAP.get("BLACK"), self._get_color(c.get("search_highlight_bg", "YELLOW")))
+                curses.init_pair(21, COLOR_MAP.get("BLACK"), self._get_color(c.get("active_search_highlight_bg", "MAGENTA")))
 
             except curses.error:
                 pass
@@ -1960,6 +1983,51 @@ class Editor:
         
         return None
 
+    def _get_search_highlight_at(self, y, x):
+        """
+        Checks if the given coordinate (y, x) is part of a search result.
+        Returns:
+            - 'active' if it's the currently active highlighted result.
+            - 'normal' if it's part of any other search result.
+            - None if it's not part of any search result.
+        """
+        # This check can be slow if there are many results.
+        # A more optimized version might use a set or a different data structure.
+        for i, (res_y, start, end) in enumerate(self.search_results):
+            if y == res_y and start <= x < end:
+                if i == self.active_search_idx:
+                    return 'active'
+                return 'normal'
+        return None
+
+    def _find_all_matches(self, jump_to_first=True):
+        """Finds all occurrences of self.search_query in the buffer and updates the results."""
+        self.search_results = []
+        self.active_search_idx = -1
+        if not self.search_query:
+            self.set_status("Search cleared.", timeout=2)
+            return
+
+        try:
+            # Case-insensitive search for now, could be made an option
+            pattern = re.compile(self.search_query, re.IGNORECASE)
+        except re.error as e:
+            self.set_status(f"Regex Error: {e}", timeout=4)
+            return
+
+        for y, line in enumerate(self.buffer.lines):
+            for match in pattern.finditer(line):
+                self.search_results.append((y, match.start(), match.end()))
+        
+        if self.search_results:
+            if jump_to_first:
+                self.active_search_idx = 0
+                # Jump to the first result
+                self.move_cursor_to(self.search_results[0][0], self.search_results[0][1])
+            self.set_status(f"Found {len(self.search_results)} matches. ({self.active_search_idx + 1}/{len(self.search_results)})", timeout=3)
+        else:
+            self.set_status(f"No matches for '{self.search_query}'", timeout=3)
+
     def _prompt_for_input(self, prompt_msg, default_text=""):
         """Draws a prompt on the status bar and waits for user text input."""
         buffer = default_text
@@ -2203,6 +2271,103 @@ class Editor:
             self.set_status(f"Show Details: {self.explorer.show_details}", timeout=2)
         elif cmd_key == KEY_ESC:
             self.active_pane = 'editor'
+
+    def _process_search_input(self, key_code, char_input):
+        """Handles key presses when the search UI is active."""
+        # Handle text input
+        if char_input:
+            if self.search_input_focused == "search":
+                self.search_query += char_input
+                self._find_all_matches() # Live search
+            else: # "replace"
+                self.replace_query += char_input
+
+        # Handle special keys
+        elif key_code in (curses.KEY_BACKSPACE, KEY_BACKSPACE, KEY_BACKSPACE2):
+            if self.search_input_focused == "search":
+                if self.search_query:
+                    self.search_query = self.search_query[:-1]
+                    self._find_all_matches() # Live search
+            else: # "replace"
+                if self.replace_query:
+                    self.replace_query = self.replace_query[:-1]
+
+        elif key_code == KEY_TAB:
+            self.search_input_focused = "replace" if self.search_input_focused == "search" else "search"
+
+        elif key_code == KEY_ESC:
+            self.search_mode = False
+            self.search_results = []
+            self.active_search_idx = -1
+            self.set_status("Search cancelled.", timeout=2)
+
+        elif key_code == curses.KEY_DOWN or (self.search_input_focused == "search" and key_code in (KEY_ENTER, KEY_RETURN)):
+            if self.search_results:
+                self.active_search_idx = (self.active_search_idx + 1) % len(self.search_results)
+                y, x, _ = self.search_results[self.active_search_idx]
+                self.move_cursor_to(y, x)
+                self.set_status(f"Match {self.active_search_idx + 1}/{len(self.search_results)}", timeout=3)
+
+        elif key_code == curses.KEY_UP:
+            if self.search_results:
+                self.active_search_idx = (self.active_search_idx - 1 + len(self.search_results)) % len(self.search_results)
+                y, x, _ = self.search_results[self.active_search_idx]
+                self.move_cursor_to(y, x)
+                self.set_status(f"Match {self.active_search_idx + 1}/{len(self.search_results)}", timeout=3)
+        
+        elif key_code in (KEY_ENTER, KEY_RETURN) and self.search_input_focused == "replace":
+            self._replace_current()
+        
+        elif key_code == CTRL_A: # Ctrl+A for Replace All
+            self._replace_all()
+
+    def _replace_current(self):
+        """Replaces the currently active search result with the replace_query."""
+        if not self.search_results or self.active_search_idx == -1:
+            self.set_status("No active match to replace.", timeout=2)
+            return
+
+        self.save_history()
+
+        y, start_x, end_x = self.search_results[self.active_search_idx]
+        line = self.buffer.lines[y]
+        
+        # Replace the text
+        new_line = line[:start_x] + self.replace_query + line[end_x:]
+        self.buffer.lines[y] = new_line
+        self.modified = True
+
+        # After replacing, re-run the search but don't jump to the start
+        current_index = self.active_search_idx
+        self._find_all_matches(jump_to_first=False)
+
+        if self.search_results:
+            # Try to keep the same index if it's still valid
+            if current_index >= len(self.search_results):
+                self.active_search_idx = len(self.search_results) - 1
+            else:
+                self.active_search_idx = current_index
+            
+            # Move to the new active match to show the user where they are
+            y, x, _ = self.search_results[self.active_search_idx]
+            self.move_cursor_to(y, x)
+            self.set_status(f"Replaced. Matches: {len(self.search_results)}. ({self.active_search_idx + 1}/{len(self.search_results)})", timeout=3)
+
+    def _replace_all(self):
+        """Replaces all occurrences of search_query with replace_query."""
+        if not self.search_results:
+            self.set_status("No matches to replace.", timeout=2)
+            return
+
+        self.save_history()
+        replacements_count = len(self.search_results)
+        # Iterate backwards to avoid messing up indices
+        for y, start_x, end_x in reversed(self.search_results):
+            line = self.buffer.lines[y]
+            self.buffer.lines[y] = line[:start_x] + self.replace_query + line[end_x:]
+        self.modified = True
+        self.search_results, self.active_search_idx = [], -1
+        self.set_status(f"Replaced {replacements_count} occurrences.", timeout=3)
 
     def _create_default_settings_file(self):
         """Creates or overwrites the setting.json file with default values."""
@@ -2696,6 +2861,13 @@ class Editor:
                     if real_index < len(line_attrs):
                         attr = line_attrs[real_index]
 
+                    # Apply search highlighting, but allow selection to override it
+                    highlight_type = self._get_search_highlight_at(file_line_idx, real_index)
+                    if highlight_type == 'active':
+                        attr = curses.color_pair(21)
+                    elif highlight_type == 'normal':
+                        attr = curses.color_pair(20)
+                    
                     if self.is_in_selection(file_line_idx, real_index):
                         attr = ATTR_SELECT
 
@@ -2780,6 +2952,32 @@ class Editor:
             display_str = f" {suggestion.ljust(max_len)} "
             self.safe_addstr(y, popup_x, display_str, attr | bg_attr)
 
+    def draw_search_ui(self):
+        """Draws the search/replace UI at the bottom of the screen."""
+        if not self.search_mode:
+            return
+
+        # 検索UIはフッターメニューの上に2行表示
+        ui_h = 2
+        start_y = self.height - self.menu_height - self.status_height - ui_h
+        
+        search_label = "Search: "
+        replace_label = "Replace: "
+        
+        # 検索ボックス
+        self.safe_addstr(start_y, 0, " " * self.width, curses.color_pair(19))
+        self.safe_addstr(start_y, 0, search_label, curses.color_pair(19))
+        self.safe_addstr(start_y, len(search_label), self.search_query, curses.color_pair(19))
+        if self.search_input_focused == "search":
+            self.safe_addstr(start_y, len(search_label) + len(self.search_query), "_", curses.color_pair(19) | curses.A_BLINK)
+
+        # 置換ボックス
+        self.safe_addstr(start_y + 1, 0, " " * self.width, curses.color_pair(19))
+        self.safe_addstr(start_y + 1, 0, replace_label, curses.color_pair(19))
+        self.safe_addstr(start_y + 1, len(replace_label), self.replace_query, curses.color_pair(19))
+        if self.search_input_focused == "replace":
+            self.safe_addstr(start_y + 1, len(replace_label) + len(self.replace_query), "_", curses.color_pair(19) | curses.A_BLINK)
+
     def draw_ui(self):
         # Plugin Manager Mode doesn't use standard UI
         if self.active_pane in ('plugin_manager', 'settings_manager'):
@@ -2795,8 +2993,38 @@ class Editor:
         # --- Breadcrumb ---
         self.draw_breadcrumb()
 
-        # --- Header ---
         mark_status = "[MARK]" if self.mark_pos else ""
+        menu_lines = []
+
+        if self.search_mode:
+            self.draw_search_ui()
+            self.menu_height = 0 # 検索UIが表示されている間はキーバインドヒントを非表示
+        else:
+            current_line_text = ""
+            
+            displayed_ids = self.config.get("displayed_keybindings", [])
+            
+            for binding_id in displayed_ids:
+                binding_info = DEFAULT_KEYBINDINGS.get(binding_id)
+                if not binding_info: continue
+
+                key_str = binding_info["key"]
+                label = binding_info["label"]
+                item_str = f"{key_str} {label}  "
+                if len(current_line_text) + len(item_str) > self.width:
+                    menu_lines.append(current_line_text)
+                    current_line_text = item_str
+                else:
+                    current_line_text += item_str
+            if current_line_text:
+                menu_lines.append(current_line_text)
+
+            self.menu_height = len(menu_lines)
+            
+            for i, line in enumerate(reversed(menu_lines)):
+                y = self.height - 1 - i
+                self.safe_addstr(y, 0, line.ljust(self.width), curses.color_pair(1))
+
         mod_char = " *" if self.modified else ""
         syntax_name = "Text"
         if self.current_syntax_rules:
@@ -2811,33 +3039,7 @@ class Editor:
         header = header.ljust(self.width)
         self.safe_addstr(1, 0, header, curses.color_pair(1) | curses.A_BOLD)
         self.header_height = 1
-
-        menu_lines = []
-        current_line_text = ""
-        
-        displayed_ids = self.config.get("displayed_keybindings", [])
-        
-        for binding_id in displayed_ids:
-            binding_info = DEFAULT_KEYBINDINGS.get(binding_id)
-            if not binding_info: continue
-
-            key_str = binding_info["key"]
-            label = binding_info["label"]
-            item_str = f"{key_str} {label}  "
-            if len(current_line_text) + len(item_str) > self.width:
-                menu_lines.append(current_line_text)
-                current_line_text = item_str
-            else:
-                current_line_text += item_str
-        if current_line_text:
-            menu_lines.append(current_line_text)
-
-        self.menu_height = len(menu_lines)
         self.status_height = 1
-
-        for i, line in enumerate(reversed(menu_lines)):
-            y = self.height - 1 - i
-            self.safe_addstr(y, 0, line.ljust(self.width), curses.color_pair(1))
 
         status_y = self.height - self.menu_height - 1
         
@@ -2899,8 +3101,8 @@ class Editor:
         if symbol:
             breadcrumb_text += f" › {symbol}"
 
-        # 描画属性（行番号と同じ色を使い、少し暗くする）
-        breadcrumb_attr = curses.color_pair(3) | curses.A_DIM
+        # 描画属性を新しいカラーペアに設定
+        breadcrumb_attr = curses.color_pair(18)
         
         # 背景をクリアし、テキストを描画
         self.safe_addstr(breadcrumb_y, 0, " " * self.width, breadcrumb_attr)
@@ -3036,54 +3238,6 @@ class Editor:
              self.move_cursor(0, 0)
         self.modified = True
         self.status_message = "Deleted line."
-        
-    def search_text(self):
-        query = self._prompt_for_input("Search (Regex): ")
-        if query is None:
-            self.set_status("Search aborted.", timeout=2)
-            return
-
-        try:
-            pattern = re.compile(query)
-        except re.error as e:
-            self.set_status(f"Invalid Regex: {e}", timeout=4)
-            return
-
-        found = False
-        start_y = self.cursor_y
-        start_x = self.cursor_x
-
-        line = self.buffer.lines[start_y]
-        match = pattern.search(line, start_x + 1)
-        if match:
-            self.cursor_y, self.cursor_x = start_y, match.start()
-            found = True
-        else:
-            for i in range(start_y + 1, len(self.buffer)):
-                match = pattern.search(self.buffer.lines[i])
-                if match:
-                    self.cursor_y, self.cursor_x = i, match.start()
-                    found = True
-                    break
-            
-            if not found:
-                for i in range(0, start_y + 1):
-                    match = pattern.search(self.buffer.lines[i])
-                    if i == start_y:
-                        if match and match.start() <= start_x:
-                            self.cursor_y, self.cursor_x = i, match.start()
-                            found = True
-                            break
-                    elif match:
-                        self.cursor_y, self.cursor_x = i, match.start()
-                        found = True
-                        break
-
-        if found:
-            self.move_cursor(self.cursor_y, self.cursor_x, update_desired_x=True)
-            self.set_status(f"Found match.", timeout=3)
-        else:
-            self.set_status(f"No match for '{query}'", timeout=3)
 
     def set_status(self, msg, timeout=3):
         self.status_message = msg
@@ -3612,6 +3766,10 @@ class Editor:
                 self._process_explorer_input(key_code, char_input)
                 continue
 
+            if self.search_mode:
+                self._process_search_input(key_code, char_input)
+                continue
+
             if self.active_pane == 'terminal':
                 if key_code == KEY_ESC:
                     self.active_pane = 'editor'
@@ -3656,7 +3814,13 @@ class Editor:
                 if self.close_current_tab():
                     return
             elif key_code == CTRL_O: self.save_file()
-            elif key_code == CTRL_W: self.search_text()
+            elif key_code == CTRL_W: 
+                self.search_mode = not self.search_mode
+                if self.search_mode:
+                    self.search_input_focused = "search"
+                else:
+                    self.search_results = []
+                    self.active_search_idx = -1
             elif key_code == CTRL_MARK:
                 if self.mark_pos: 
                     self.mark_pos = None
