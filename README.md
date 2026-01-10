@@ -14,6 +14,7 @@
 [![Python Version](https://img.shields.io/pypi/pyversions/caffee.svg)](https://pypi.org/project/caffee/)
 [![License](https://img.shields.io/pypi/l/caffee.svg)](https://github.com/iamthe000/CAFFEE_Editor/blob/main/LICENSE)
 [![Downloads](https://img.shields.io/pypi/dm/caffee.svg)](https://pypi.org/project/caffee/)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/caffee?period=total&units=INTERNATIONAL_SYSTEM&left_color=GRAY&right_color=GREEN&left_text=TotalDownloads)](https://pepy.tech/projects/caffee)
 
 </div>
 
