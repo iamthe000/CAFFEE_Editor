@@ -13,7 +13,7 @@
     
 [![PyPI Version](https://img.shields.io/pypi/v/caffee.svg)](https://pypi.org/project/caffee/)
 [![Python Version](https://img.shields.io/pypi/pyversions/caffee.svg)](https://pypi.org/project/caffee/)
-[![License](https://img.shields.io/pypi/l/caffee.svg)](https://github.com/iamthe000/CAFFEE_Editor/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Downloads](https://img.shields.io/pypi/dm/caffee.svg)](https://pypi.org/project/caffee/)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/caffee?period=total&units=INTERNATIONAL_SYSTEM&left_color=GRAY&right_color=GREEN&left_text=TotalDownloads)](https://pepy.tech/projects/caffee)
 
@@ -250,4 +250,4 @@ Contributions are welcome! Please fork the repository, make focused changes in a
 ---
 
 ## 📄 License
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU General Public License v3. See the [LICENSE](LICENSE) file for details.
