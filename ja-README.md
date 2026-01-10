@@ -9,6 +9,7 @@
 </div>
 
 <div align="center">
+【祝】PyPI 全期間でのダウンロードが5Kを超えました🎉
 
 [![PyPI Version](https://img.shields.io/pypi/v/caffee.svg)](https://pypi.org/project/caffee/)
 [![Python Version](https://img.shields.io/pypi/pyversions/caffee.svg)](https://pypi.org/project/caffee/)
