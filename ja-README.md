@@ -2,7 +2,7 @@
 
 # ☕ CAFFEE ターミナルテキストエディタ
 
-[![preview](preview.png)](preview.png)
+<img src="preview.png" width="600px">
 
 **ターミナルで動作する、軽量でモダン、そして拡張可能なテキストエディタ。**
 
