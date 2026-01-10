@@ -12,14 +12,14 @@ dynamic = ["version"]
 description = "A simple CUI editor for Caffee."
 readme = "README.md"
 requires-python = ">=3.8"
-license = { text = "MIT" } # ライセンスを明記
+license = { text = "GPL-3.0-or-later" } # ライセンスを明記
 authors = [
     { name = "iamthe000", email = "your_email@example.com" },
 ]
 keywords = ["cui", "editor", "cli", "terminal"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Operating System :: OS Independent",
     "Environment :: Console",
     "Topic :: Text Editors",
