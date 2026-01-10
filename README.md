@@ -1,20 +1,44 @@
-# ☕ CAFFEE Command Line Text Editor
+<div align="center">
 
-## install
-```bash
-pip install caffee
-```
-## upgrade
-```bash
-pip install caffee --upgrade
-```
+# ☕ CAFFEE Terminal Text Editor
 
-<a href="ja-README.md">🇯🇵 日本語版README</a>　
-<a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">Official Japanese UI Plugin</a>　
-<a href="Nuitka_Step.md">Nuitka Compilation Guide</a>　
-<a href="Setup_PATH.md">PATH Setup Guide</a>
+[![preview](preview.PNG)](preview.PNG)
 
-**CAFFEE** is a lightweight terminal text editor written in Python using the curses library. It aims to provide a simple, extensible, and efficient editing experience directly in your terminal with modern IDE-like features.
+**A lightweight, modern, and extensible text editor that runs in your terminal.**
+
+</div>
+
+<div align="center">
+
+[![PyPI Version](https://img.shields.io/pypi/v/caffee.svg)](https://pypi.org/project/caffee/)
+[![Python Version](https://img.shields.io/pypi/pyversions/caffee.svg)](https://pypi.org/project/caffee/)
+[![License](https://img.shields.io/pypi/l/caffee.svg)](https://github.com/iamthe000/CAFFEE_Editor/blob/main/LICENSE)
+[![Downloads](https://img.shields.io/pypi/dm/caffee.svg)](https://pypi.org/project/caffee/)
+
+</div>
+
+<div align="center">
+
+<a href="ja-README.md">🇯🇵 日本語</a> | <a href="Nuitka_Step.md">Nuitka Compilation Guide</a> | <a href="Setup_PATH.md">PATH Setup Guide</a> | <a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">Official Japanese UI Plugin</a>
+
+</div>
+
+---
+
+**CAFFEE** is a terminal text editor written in Python, designed for a simple, extensible, and efficient editing experience with modern IDE-like features.
+
+## Table of Contents
+- [✨ What's New](#-whats-new-in-v240)
+- [💡 Core Features](#-core-features)
+- [💻 Installation](#-installation)
+- [⌨️ Keybindings](#️-keybindings)
+- [🚀 Command Mode](#-command-mode)
+- [⚙️ Configuration](#️-configuration)
+- [🧩 Plugin System](#-plugin-system)
+- [🛠️ Troubleshooting](#️-troubleshooting)
+- [🤝 Contributing](#-contributing)
+- [📄 License](#-license)
+
 
 ---
 
@@ -68,17 +92,25 @@ pip install caffee --upgrade
 ## 💻 Installation
 
 ### Requirements
-- **Python 3.6+**
+- **Python 3.8+**
 - Unix-like terminal (Linux, macOS, ChromeOS Linux shell)
 - `curses` library (usually included with Python)
 
 ### Quick Start
 ```bash
+# Install from PyPI
+pip install caffee
+
 # Run the editor
 caffee
 
 # Or open a specific file
 caffee /path/to/file.py
+```
+
+### Upgrade
+```bash
+pip install caffee --upgrade
 ```
 
 ### Optional: Speed Up with Nuitka
@@ -216,4 +248,4 @@ Contributions are welcome! Please fork the repository, make focused changes in a
 ---
 
 ## 📄 License
-MIT License - See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
