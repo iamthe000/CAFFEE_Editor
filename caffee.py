@@ -57,7 +57,7 @@ except ImportError:
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "2.6.2"
+VERSION = "2.6.3"
 DEFAULT_CONFIG = {
     "tab_width": 4,
     "history_limit": 50,
@@ -2575,7 +2575,13 @@ class Editor:
             if y >= self.height or x >= self.width: return
             available = self.width - x
             if len(string) > available: string = string[:available]
-            self.stdscr.addstr(y, x, string, attr)
+
+            # Known curses bug: addstr to bottom-right corner raises an error.
+            # Use insstr() for this specific case to avoid it.
+            if y == self.height - 1 and len(string) == available:
+                self.stdscr.insstr(y, x, string, attr)
+            else:
+                self.stdscr.addstr(y, x, string, attr)
         except curses.error:
             pass
 
