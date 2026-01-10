@@ -2,7 +2,7 @@
 
 # ☕ CAFFEE Terminal Text Editor
 
-[![preview](preview.png)](preview.png)
+<img src="preview.png" width="600px">
 
 **A lightweight, modern, and extensible text editor that runs in your terminal.**
 
