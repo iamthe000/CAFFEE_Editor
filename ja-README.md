@@ -1,20 +1,44 @@
-# ☕ CAFFEE コマンドラインテキストエディタ
+<div align="center">
 
-## インストール
-```bash
-pip install caffee
-```
-## アップグレード
-```bash
-pip install caffee --upgrade
-```
+# ☕ CAFFEE ターミナルテキストエディタ
 
-<a href="README.md">🇬🇧 English README</a>　
-<a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">公式UI日本語化プラグイン</a>　
-<a href="Nuitka_Step.md">Nuitkaによる高速化手順</a>　
-<a href="Setup_PATH.md">PATHのセットアップ方法</a>
+[![preview](preview.PNG)](preview.PNG)
 
-**CAFFEE**は、Pythonとcursesライブラリで書かれた軽量なターミナルテキストエディタです。シンプルで拡張性があり、効率的な編集体験を、最新のIDE風の機能と共にターミナル内で直接提供することを目指しています。
+**ターミナルで動作する、軽量でモダン、そして拡張可能なテキストエディタ。**
+
+</div>
+
+<div align="center">
+
+[![PyPI Version](https://img.shields.io/pypi/v/caffee.svg)](https://pypi.org/project/caffee/)
+[![Python Version](https://img.shields.io/pypi/pyversions/caffee.svg)](https://pypi.org/project/caffee/)
+[![License](https://img.shields.io/pypi/l/caffee.svg)](https://github.com/iamthe000/CAFFEE_Editor/blob/main/LICENSE)
+[![Downloads](https://img.shields.io/pypi/dm/caffee.svg)](https://pypi.org/project/caffee/)
+
+</div>
+
+<div align="center">
+
+<a href="README.md">🇬🇧 English</a> | <a href="Nuitka_Step.md">Nuitkaによる高速化手順</a> | <a href="Setup_PATH.md">PATHのセットアップ方法</a> | <a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">公式UI日本語化プラグイン</a>
+
+</div>
+
+---
+
+**CAFFEE**は、Pythonで書かれたターミナルテキストエディタです。シンプルで拡張性があり、効率的な編集体験を、最新のIDE風の機能と共に提供することを目指しています。
+
+## 目次
+- [✨ 新機能](#-v240の新機能)
+- [💡 主な機能](#-主な機能)
+- [💻 インストール](#-インストール)
+- [⌨️ キーバインディング](#️-キーバインディング)
+- [🚀 コマンドモード](#-コマンドモード)
+- [⚙️ 設定](#️-設定)
+- [🧩 プラグインシステム](#-プラグインシステム)
+- [🛠️ トラブルシューティング](#️-トラブルシューティング)
+- [🤝 コントリビューション](#-コントリビューション)
+- [📄 ライセンス](#-ライセンス)
+
 
 ---
 
@@ -68,17 +92,25 @@ pip install caffee --upgrade
 ## 💻 インストール
 
 ### 必要要件
-- **Python 3.6以上**
+- **Python 3.8以上**
 - Unix系ターミナル（Linux、macOS、ChromeOS Linuxシェル）
 - `curses`ライブラリ（通常Pythonに含まれています）
 
 ### クイックスタート
 ```bash
+# PyPIからインストール
+pip install caffee
+
 # エディタを実行
 caffee
 
 # または特定のファイルを開く
 caffee /path/to/file.py
+```
+
+### アップグレード
+```bash
+pip install caffee --upgrade
 ```
 
 ### オプション: Nuitkaによる高速化
@@ -215,4 +247,4 @@ caffee /path/to/file.py
 ---
 
 ## 📄 ライセンス
-MITライセンス - 詳細は[LICENSE](LICENSE)ファイルを参照してください。
+このプロジェクトはMITライセンスの下で公開されています。詳細は[LICENSE](LICENSE)ファイルを参照してください。
