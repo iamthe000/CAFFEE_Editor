@@ -79,6 +79,7 @@ DEFAULT_CONFIG = {
     "show_terminal_default": True,
     "explorer_show_details": True, # エクスプローラーで日付やサイズを表示するか
     "show_relative_linenum": False, # 相対行数を表示するか
+    "show_breadcrumb": True, # ファイルパスやシンボルを表示するか
     # --------------------------
     # --- Keybinding Display ---
     "displayed_keybindings": [
@@ -337,6 +338,7 @@ NERD_FONT_ICONS = {
 DEFAULT_SYNTAX_RULES = {
     "python": {
         "extensions": [".py", ".pyw"],
+        "symbol_pattern": r"^\s*(?:def|class)\s+([a-zA-Z_][a-zA-Z0-9_]*)",
         "keywords": r"\b(and|as|assert|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|not|or|pass|raise|return|try|while|with|yield|None|True|False|self)\b",
         "comments": r"#.*",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
@@ -344,6 +346,7 @@ DEFAULT_SYNTAX_RULES = {
     },
     "javascript": {
         "extensions": [".js", ".json"],
+        "symbol_pattern": r"^\s*(?:function|class|const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*(?:=|\(|{)",
         "keywords": r"\b(function|return|var|let|const|if|else|for|while|break|switch|case|default|import|export|true|false|null)\b",
         "comments": r"//.*",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
@@ -351,6 +354,7 @@ DEFAULT_SYNTAX_RULES = {
     },
     "c_cpp": {
         "extensions": [".c", ".cpp", ".h", ".hpp", ".cc"],
+        "symbol_pattern": r"^\s*(?:[\w\s\*&]+?)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)\s*\{?",
         "keywords": r"\b(int|float|double|char|void|if|else|for|while|return|struct|class|public|private|protected|include)\b",
         "comments": r"//.*",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
@@ -358,6 +362,7 @@ DEFAULT_SYNTAX_RULES = {
     },
     "go": {
         "extensions": [".go"],
+        "symbol_pattern": r"^\s*func\s+(?:\([^)]+\)\s+)?([a-zA-Z_][a-zA-Z0-9_]*)",
         "keywords": r"\b(break|case|chan|const|continue|default|defer|else|fallthrough|for|func|go|goto|if|import|interface|map|package|range|return|select|struct|switch|type|var|true|false|nil|append|cap|close|complex|copy|delete|imag|len|make|new|panic|print|println|real|recover|bool|byte|complex64|complex128|error|float32|float64|int|int8|int16|int32|int64|rune|string|uint|uint8|uint16|uint32|uint64|uintptr)\b",
         "comments": r"//.*",
         "strings": r"(['\"`])(?:(?<!\\)\1|.)*?\1",
@@ -365,6 +370,7 @@ DEFAULT_SYNTAX_RULES = {
     },
     "rust": {
         "extensions": [".rs"],
+        "symbol_pattern": r"^\s*(?:fn|struct|enum|trait|impl)\s+([a-zA-Z_][a-zA-Z0-9_]*)",
         "keywords": r"\b(as|break|const|continue|crate|else|enum|extern|false|fn|for|if|impl|in|let|loop|match|mod|move|mut|pub|ref|return|self|Self|static|struct|super|trait|true|type|unsafe|use|where|while)\b",
         "comments": r"//.*",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
@@ -390,6 +396,7 @@ DEFAULT_SYNTAX_RULES = {
     },
     "java": {
         "extensions": [".java"],
+        "symbol_pattern": r"^\s*(?:public|private|protected)?\s*(?:static\s+)?\w+\s+([a-zA-Z_]\w*)\s*\(",
         "keywords": r"\b(abstract|continue|for|new|switch|assert|default|goto|package|synchronized|boolean|do|if|private|this|break|double|implements|protected|throw|byte|else|import|public|throws|case|enum|instanceof|return|transient|catch|extends|int|short|try|char|final|interface|static|void|class|finally|long|strictfp|volatile|const|float|native|super|while|true|false|null)\b",
         "comments": r"//.*|/\*[\s\S]*?\*/",
         "strings": r"(\".*?\")",
@@ -397,6 +404,7 @@ DEFAULT_SYNTAX_RULES = {
     },
     "ruby": {
         "extensions": [".rb"],
+        "symbol_pattern": r"^\s*(?:def|class|module)\s+([a-zA-Z_]\w*)",
         "keywords": r"\b(BEGIN|END|alias|and|begin|break|case|class|def|defined|do|else|elsif|end|ensure|false|for|if|in|module|next|nil|not|or|redo|rescue|retry|return|self|super|then|true|undef|unless|until|when|while|yield|__FILE__|__LINE__)\b",
         "comments": r"#.*",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
@@ -404,6 +412,7 @@ DEFAULT_SYNTAX_RULES = {
     },
     "php": {
         "extensions": [".php"],
+        "symbol_pattern": r"^\s*(?:function|class|trait|interface)\s+([a-zA-Z_]\w*)",
         "keywords": r"\b(abstract|and|array|as|break|case|catch|class|clone|const|continue|declare|default|die|do|echo|else|elseif|empty|enddeclare|endfor|endforeach|endif|endswitch|endwhile|eval|exit|extends|final|for|foreach|function|global|if|implements|include|include_once|instanceof|interface|isset|list|namespace|new|or|print|private|protected|public|require|require_once|return|static|switch|throw|try|unset|use|var|while|xor|__FILE__|__LINE__|__DIR__|__FUNCTION__|__CLASS__|__METHOD__|__NAMESPACE__)\b",
         "comments": r"//.*|#.*|/\*[\s\S]*?\*/",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
@@ -411,6 +420,7 @@ DEFAULT_SYNTAX_RULES = {
     },
     "typescript": {
         "extensions": [".ts", ".tsx"],
+        "symbol_pattern": r"^\s*(?:export\s+)?(?:abstract\s+)?(?:async\s+)?(?:function|class|interface|enum|type)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)",
         "keywords": r"\b(break|case|catch|class|const|continue|debugger|default|delete|do|else|enum|export|extends|false|finally|for|function|if|import|in|instanceof|new|null|return|super|switch|this|throw|true|try|typeof|var|void|while|with|as|implements|interface|let|package|private|protected|public|static|yield|any|boolean|constructor|declare|get|module|require|number|set|string|symbol|type|from|of)\b",
         "comments": r"//.*|/\*[\s\S]*?\*/",
         "strings": r"(['\"`])(?:(?<!\\)\1|.)*?\1",
@@ -1926,6 +1936,30 @@ class Editor:
     def prompt_user(self, prompt_msg, default_value=""):
         return self._prompt_for_input(prompt_msg, default_text=default_value)
 
+    def _get_current_symbol(self):
+        """カーソル位置に基づいて現在の関数やクラス名を特定する"""
+        if not self.current_syntax_rules:
+            return None
+
+        pattern_str = self.current_syntax_rules.get("symbol_pattern")
+        if not pattern_str:
+            return None
+
+        try:
+            pattern = re.compile(pattern_str)
+        except re.error:
+            return None
+
+        # カーソル行から上に向かってスキャン
+        for i in range(self.cursor_y, -1, -1):
+            line = self.buffer.lines[i]
+            match = pattern.search(line)
+            if match:
+                # 複数のキャプチャグループがある場合を考慮し、最後のものを優先
+                return match.groups()[-1]
+        
+        return None
+
     def _prompt_for_input(self, prompt_msg, default_text=""):
         """Draws a prompt on the status bar and waits for user text input."""
         buffer = default_text
@@ -2489,9 +2523,10 @@ class Editor:
         return start[0] < y < end[0]
 
     def get_edit_rect(self):
-        y = self.tab_bar_height + self.header_height
+        breadcrumb_h = 1 if self.config.get("show_breadcrumb", True) else 0
+        y = self.tab_bar_height + self.header_height + breadcrumb_h
         x = 0
-        h = self.height - self.tab_bar_height - self.header_height - self.status_height - self.menu_height
+        h = self.height - self.tab_bar_height - self.header_height - breadcrumb_h - self.status_height - self.menu_height
         w = self.width
         
         if self.show_terminal:
@@ -2506,12 +2541,12 @@ class Editor:
 
     def get_explorer_rect(self):
         if not self.show_explorer: return 0,0,0,0
-        _, _, edit_h, edit_w = self.get_edit_rect()
         
-        y = self.tab_bar_height + self.header_height
+        breadcrumb_h = 1 if self.config.get("show_breadcrumb", True) else 0
+        y = self.tab_bar_height + self.header_height + breadcrumb_h
         w = min(self.explorer_width, self.width - 20)
         x = self.width - w
-        h = self.height - self.tab_bar_height - self.header_height - self.status_height - self.menu_height
+        h = self.height - self.tab_bar_height - self.header_height - breadcrumb_h - self.status_height - self.menu_height
         if self.show_terminal:
             term_h = min(self.terminal_height, h - 5)
             h -= term_h
@@ -2757,6 +2792,9 @@ class Editor:
         # --- Tab Bar Drawing ---
         self.draw_tab_bar()
         
+        # --- Breadcrumb ---
+        self.draw_breadcrumb()
+
         # --- Header ---
         mark_status = "[MARK]" if self.mark_pos else ""
         mod_char = " *" if self.modified else ""
@@ -2839,6 +2877,34 @@ class Editor:
             self.safe_addstr(0, current_x, display, pair)
             current_x += len(display)
             if current_x >= self.width: break
+
+    def draw_breadcrumb(self):
+        """Draws the breadcrumb bar below the header"""
+        if not self.config.get("show_breadcrumb", True):
+            return
+
+        breadcrumb_y = self.tab_bar_height + self.header_height
+
+        path_str = self.filename or "untitled"
+        
+        # パスを読みやすくする
+        home = os.path.expanduser("~")
+        if self.filename and self.filename.startswith(home):
+            path_str = os.path.join("~", os.path.relpath(self.filename, home))
+
+        path_parts = path_str.split(os.sep)
+        breadcrumb_text = " › ".join(path_parts)
+
+        symbol = self._get_current_symbol()
+        if symbol:
+            breadcrumb_text += f" › {symbol}"
+
+        # 描画属性（行番号と同じ色を使い、少し暗くする）
+        breadcrumb_attr = curses.color_pair(3) | curses.A_DIM
+        
+        # 背景をクリアし、テキストを描画
+        self.safe_addstr(breadcrumb_y, 0, " " * self.width, breadcrumb_attr)
+        self.safe_addstr(breadcrumb_y, 0, f" {truncate_to_width(breadcrumb_text, self.width - 2)}", breadcrumb_attr)
 
     def move_cursor(self, y, x, update_desired_x=False, check_bounds=False):
         new_y = max(0, min(y, len(self.buffer) - 1))
