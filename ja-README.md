@@ -173,6 +173,7 @@ pip install caffee --upgrade
   "tab_width": 4,
   "history_limit": 50,
   "use_soft_tabs": true,
+  "auto_indent": true,
   "backup_count": 5,
   "enable_predictive_text": true,
   
@@ -199,6 +200,7 @@ pip install caffee --upgrade
 ```
 
 ### 主な設定オプション
+- **`auto_indent`**: 自動インデントの有効/無効。
 - **`enable_predictive_text`**: 自動補完候補の有効/無効。
 - **`explorer_show_details`**: エクスプローラーでファイルサイズと更新日時を表示。
 - **`displayed_keybindings`**: フッターバーに表示するキーバインドをカスタマイズ。
