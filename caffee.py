@@ -350,6 +350,7 @@ DEFAULT_SYNTAX_RULES = {
         "symbol_pattern": r"^\s*(?:def|class)\s+([a-zA-Z_][a-zA-Z0-9_]*)",
         "keywords": r"\b(and|as|assert|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|not|or|pass|raise|return|try|while|with|yield|None|True|False|self)\b",
         "comments": r"#.*",
+        "line_comment": "#",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
         "numbers": r"\b\d+\b"
     },
@@ -358,6 +359,7 @@ DEFAULT_SYNTAX_RULES = {
         "symbol_pattern": r"^\s*(?:function|class|const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*(?:=|\(|{)",
         "keywords": r"\b(function|return|var|let|const|if|else|for|while|break|switch|case|default|import|export|true|false|null)\b",
         "comments": r"//.*",
+        "line_comment": "//",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
         "numbers": r"\b\d+\b"
     },
@@ -366,6 +368,7 @@ DEFAULT_SYNTAX_RULES = {
         "symbol_pattern": r"^\s*(?:[\w\s\*&]+?)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)\s*\{?",
         "keywords": r"\b(int|float|double|char|void|if|else|for|while|return|struct|class|public|private|protected|include)\b",
         "comments": r"//.*",
+        "line_comment": "//",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
         "numbers": r"\b\d+\b"
     },
@@ -374,6 +377,7 @@ DEFAULT_SYNTAX_RULES = {
         "symbol_pattern": r"^\s*func\s+(?:\([^)]+\)\s+)?([a-zA-Z_][a-zA-Z0-9_]*)",
         "keywords": r"\b(break|case|chan|const|continue|default|defer|else|fallthrough|for|func|go|goto|if|import|interface|map|package|range|return|select|struct|switch|type|var|true|false|nil|append|cap|close|complex|copy|delete|imag|len|make|new|panic|print|println|real|recover|bool|byte|complex64|complex128|error|float32|float64|int|int8|int16|int32|int64|rune|string|uint|uint8|uint16|uint32|uint64|uintptr)\b",
         "comments": r"//.*",
+        "line_comment": "//",
         "strings": r"(['\"`])(?:(?<!\\)\1|.)*?\1",
         "numbers": r"\b\d+\b"
     },
@@ -382,6 +386,7 @@ DEFAULT_SYNTAX_RULES = {
         "symbol_pattern": r"^\s*(?:fn|struct|enum|trait|impl)\s+([a-zA-Z_][a-zA-Z0-9_]*)",
         "keywords": r"\b(as|break|const|continue|crate|else|enum|extern|false|fn|for|if|impl|in|let|loop|match|mod|move|mut|pub|ref|return|self|Self|static|struct|super|trait|true|type|unsafe|use|where|while)\b",
         "comments": r"//.*",
+        "line_comment": "//",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
         "numbers": r"\b\d+\b"
     },
@@ -408,6 +413,7 @@ DEFAULT_SYNTAX_RULES = {
         "symbol_pattern": r"^\s*(?:public|private|protected)?\s*(?:static\s+)?\w+\s+([a-zA-Z_]\w*)\s*\(",
         "keywords": r"\b(abstract|continue|for|new|switch|assert|default|goto|package|synchronized|boolean|do|if|private|this|break|double|implements|protected|throw|byte|else|import|public|throws|case|enum|instanceof|return|transient|catch|extends|int|short|try|char|final|interface|static|void|class|finally|long|strictfp|volatile|const|float|native|super|while|true|false|null)\b",
         "comments": r"//.*|/\*[\s\S]*?\*/",
+        "line_comment": "//",
         "strings": r"(\".*?\")",
         "numbers": r"\b\d+\b"
     },
@@ -416,6 +422,7 @@ DEFAULT_SYNTAX_RULES = {
         "symbol_pattern": r"^\s*(?:def|class|module)\s+([a-zA-Z_]\w*)",
         "keywords": r"\b(BEGIN|END|alias|and|begin|break|case|class|def|defined|do|else|elsif|end|ensure|false|for|if|in|module|next|nil|not|or|redo|rescue|retry|return|self|super|then|true|undef|unless|until|when|while|yield|__FILE__|__LINE__)\b",
         "comments": r"#.*",
+        "line_comment": "#",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
         "numbers": r"\b\d+\b"
     },
@@ -424,6 +431,7 @@ DEFAULT_SYNTAX_RULES = {
         "symbol_pattern": r"^\s*(?:function|class|trait|interface)\s+([a-zA-Z_]\w*)",
         "keywords": r"\b(abstract|and|array|as|break|case|catch|class|clone|const|continue|declare|default|die|do|echo|else|elseif|empty|enddeclare|endfor|endforeach|endif|endswitch|endwhile|eval|exit|extends|final|for|foreach|function|global|if|implements|include|include_once|instanceof|interface|isset|list|namespace|new|or|print|private|protected|public|require|require_once|return|static|switch|throw|try|unset|use|var|while|xor|__FILE__|__LINE__|__DIR__|__FUNCTION__|__CLASS__|__METHOD__|__NAMESPACE__)\b",
         "comments": r"//.*|#.*|/\*[\s\S]*?\*/",
+        "line_comment": "//",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
         "numbers": r"\b\d+\b"
     },
@@ -432,6 +440,7 @@ DEFAULT_SYNTAX_RULES = {
         "symbol_pattern": r"^\s*(?:export\s+)?(?:abstract\s+)?(?:async\s+)?(?:function|class|interface|enum|type)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)",
         "keywords": r"\b(break|case|catch|class|const|continue|debugger|default|delete|do|else|enum|export|extends|false|finally|for|function|if|import|in|instanceof|new|null|return|super|switch|this|throw|true|try|typeof|var|void|while|with|as|implements|interface|let|package|private|protected|public|static|yield|any|boolean|constructor|declare|get|module|require|number|set|string|symbol|type|from|of)\b",
         "comments": r"//.*|/\*[\s\S]*?\*/",
+        "line_comment": "//",
         "strings": r"(['\"`])(?:(?<!\\)\1|.)*?\1",
         "numbers": r"\b\d+\b"
     },
@@ -439,6 +448,7 @@ DEFAULT_SYNTAX_RULES = {
         "extensions": [".sh", ".bash"],
         "keywords": r"\b(if|then|else|elif|fi|case|esac|for|select|while|until|do|done|in|function|time|coproc|true|false|echo|read|unset|export|declare|let|eval|exec|set|shift|trap|exit|return|break|continue)\b",
         "comments": r"#.*",
+        "line_comment": "#",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
         "numbers": r"\b\d+\b"
     },
@@ -453,6 +463,7 @@ DEFAULT_SYNTAX_RULES = {
         "extensions": [".lua"],
         "keywords": r"\b(and|break|do|else|elseif|end|false|for|function|if|in|local|nil|not|or|repeat|return|then|true|until|while)\b",
         "comments": r"--.*",
+        "line_comment": "--",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
         "numbers": r"\b\d+\b"
     },
@@ -460,6 +471,7 @@ DEFAULT_SYNTAX_RULES = {
         "extensions": [".pl", ".pm"],
         "keywords": r"\b(my|our|local|sub|if|else|elsif|for|foreach|while|until|use|require|package|print|say)\b",
         "comments": r"#.*",
+        "line_comment": "#",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
         "numbers": r"\b\d+\b"
     },
@@ -467,6 +479,7 @@ DEFAULT_SYNTAX_RULES = {
         "extensions": [".kt", ".kts"],
         "keywords": r"\b(fun|val|var|if|else|when|for|while|return|class|interface|package|import|true|false|null|object|is|in)\b",
         "comments": r"//.*|/\*[\s\S]*?\*/",
+        "line_comment": "//",
         "strings": r"(\".*?\")",
         "numbers": r"\b\d+\b"
     },
@@ -474,6 +487,7 @@ DEFAULT_SYNTAX_RULES = {
         "extensions": [".swift"],
         "keywords": r"\b(let|var|func|if|else|for|in|while|switch|case|return|class|struct|enum|protocol|import|true|false|nil|public|private|internal|fileprivate|open)\b",
         "comments": r"//.*|/\*[\s\S]*?\*/",
+        "line_comment": "//",
         "strings": r"(\".*?\")",
         "numbers": r"\b\d+\b"
     },
@@ -481,6 +495,7 @@ DEFAULT_SYNTAX_RULES = {
         "extensions": [".dart"],
         "keywords": r"\b(var|final|const|if|else|for|in|while|do|switch|case|break|continue|return|void|import|as|show|hide|true|false|null|class|extends|with|implements|enum|mixin)\b",
         "comments": r"//.*|/\*[\s\S]*?\*/",
+        "line_comment": "//",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
         "numbers": r"\b\d+\b"
     },
@@ -488,6 +503,7 @@ DEFAULT_SYNTAX_RULES = {
         "extensions": [".ex", ".exs"],
         "keywords": r"\b(def|defmodule|defp|if|else|case|cond|fn|end|true|false|nil|do|require|alias|import|use|with)\b|:\w+",
         "comments": r"#.*",
+        "line_comment": "#",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
         "numbers": r"\b\d+\b"
     }
@@ -2690,11 +2706,11 @@ class Editor:
             "                                         　   (   ) )",
             "                                         　    ) ( (",
             "                                         　  _______)",
-            f"   _________    ________________________　.-'-------|",
-            f"  / ____/   |  / ____/ ____/ ____/ ____/　| CAFFEE  |__",
-            f" / /   / /| | / /_  / /_  / __/ / __/   　| v{VERSION}  |__)",
-            f"/ /___/ ___ |/ __/ / __/ / /___/ /___   　|_________|",
-            f"\____/_/  |_/_/   /_/   /_____/_____/   　 `-------'"
+            rf"   _________    ________________________　.-'-------|",
+            rf"  / ____/   |  / ____/ ____/ ____/ ____/　| CAFFEE  |__",
+            rf" / /   / /| | / /_  / /_  / __/ / __/   　| v{VERSION}  |__)",
+            rf"/ /___/ ___ |/ __/ / __/ / /___/ /___   　|_________|",
+            rf"\____/_/  |_/_/   /_/   /_____/_____/   　 `-------'"
         ]
         my = self.height // 2 - 6
         mx = self.width // 2 
@@ -3278,23 +3294,69 @@ class Editor:
 
     def toggle_comment(self):
         if not self.buffer.lines: return
+        
+        # Get comment symbol
+        rules = self.current_syntax_rules
+        symbol = None
+        if rules:
+            symbol = rules.get("line_comment")
+        
+        if not symbol:
+            symbol = self._prompt_for_input("Comment symbol: ")
+            if not symbol:
+                self.set_status("Comment aborted.", timeout=2)
+                return
+            # Cache it in the current syntax rules for the session
+            if self.current_tab.current_syntax_rules is None:
+                self.current_tab.current_syntax_rules = {"line_comment": symbol}
+            else:
+                self.current_tab.current_syntax_rules["line_comment"] = symbol
+            rules = self.current_tab.current_syntax_rules
+
         self.save_history()
-        y = self.cursor_y
-        line = self.buffer.lines[y]
-        match = re.match(r'^\s*#', line)
-        if match:
-            comment_pos = match.end() - 1
-            self.buffer.lines[y] = line[:comment_pos] + line[comment_pos+1:]
-            if self.cursor_x > comment_pos: self.cursor_x -= 1
-            self.status_message = "Uncommented line."
+        sel = self.get_selection_range()
+        if sel:
+            start, end = sel
+            start_y, end_y = start[0], end[0]
+            # If selection ends at the beginning of a line, don't include that line
+            if end[1] == 0 and end_y > start_y:
+                end_y -= 1
         else:
-            m = re.match(r'^(\s*)', line)
-            indent_len = len(m.group(1)) if m else 0
-            self.buffer.lines[y] = line[:indent_len] + "#" + line[indent_len:]
-            if self.cursor_x >= indent_len: self.cursor_x += 1
-            self.status_message = "Commented line."
+            start_y = end_y = self.cursor_y
+
+        # Determine if we should comment or uncomment
+        # Logic: if any line is NOT commented, comment all. Else uncomment all.
+        pattern = re.compile(r'^\s*' + re.escape(symbol))
+        any_not_commented = False
+        for y in range(start_y, end_y + 1):
+            if not pattern.match(self.buffer.lines[y]) and self.buffer.lines[y].strip():
+                any_not_commented = True
+                break
+        
+        for y in range(start_y, end_y + 1):
+            line = self.buffer.lines[y]
+            if not line.strip(): continue # Skip empty lines
+
+            if any_not_commented:
+                # Commenting: insert symbol after leading whitespace
+                m = re.match(r'^(\s*)', line)
+                indent_len = len(m.group(1)) if m else 0
+                self.buffer.lines[y] = line[:indent_len] + symbol + line[indent_len:]
+                if y == self.cursor_y and self.cursor_x >= indent_len:
+                    self.cursor_x += len(symbol)
+            else:
+                # Uncommenting: remove symbol
+                match = pattern.match(line)
+                if match:
+                    # Find where the symbol actually starts (match.end() - len(symbol))
+                    symbol_start = match.end() - len(symbol)
+                    self.buffer.lines[y] = line[:symbol_start] + line[match.end():]
+                    if y == self.cursor_y and self.cursor_x > symbol_start:
+                        self.cursor_x = max(symbol_start, self.cursor_x - len(symbol))
+        
         self.modified = True
         self.desired_x = self.cursor_x
+        self.set_status(("Commented" if any_not_commented else "Uncommented") + " lines.")
 
     def delete_line(self):
         if not self.buffer.lines: return
