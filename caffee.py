@@ -1522,6 +1522,8 @@ class Editor:
             'new': self._command_new,
             'set': self._command_set,
             'diff': self.show_diff,
+            'delcomm': self._command_delcomm,
+            'deletecomments': self._command_delcomm,
         }
 
         self.init_colors()
@@ -3225,6 +3227,46 @@ class Editor:
             # 右端に到達した場合、見える範囲を右にシフト
             self.col_offset = self.cursor_x - actual_edit_w + 1
 
+    def _set_system_clipboard(self, text):
+        """システムクリップボードにテキストを設定する"""
+        system = platform.system()
+        try:
+            if system == "Windows":
+                # PowerShellを使用してUnicode対応で設定
+                subprocess.run(['powershell.exe', '-NoProfile', '-Command', '$input | Set-Clipboard'], input=text.encode('utf-8'), check=True, shell=True)
+            elif system == "Darwin":
+                subprocess.run(['pbcopy'], input=text.encode('utf-8'), check=True)
+            elif system == "Linux":
+                try:
+                    subprocess.run(['xclip', '-selection', 'clipboard'], input=text.encode('utf-8'), check=True)
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    try:
+                        subprocess.run(['xsel', '--clipboard', '--input'], input=text.encode('utf-8'), check=True)
+                    except (subprocess.CalledProcessError, FileNotFoundError):
+                        pass
+        except Exception:
+            pass
+
+    def _get_system_clipboard(self):
+        """システムクリップボードからテキストを取得する"""
+        system = platform.system()
+        try:
+            if system == "Windows":
+                # powershellを使用。-Rawで改行などを保持。
+                return subprocess.check_output(['powershell.exe', '-NoProfile', '-Command', 'Get-Clipboard -Raw'], text=True, shell=True).replace('\r\n', '\n')
+            elif system == "Darwin":
+                return subprocess.check_output(['pbpaste'], text=True).replace('\r\n', '\n')
+            elif system == "Linux":
+                try:
+                    return subprocess.check_output(['xclip', '-selection', 'clipboard', '-o'], text=True).replace('\r\n', '\n')
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    try:
+                        return subprocess.check_output(['xsel', '--clipboard', '--output'], text=True).replace('\r\n', '\n')
+                    except (subprocess.CalledProcessError, FileNotFoundError):
+                        return None
+        except Exception:
+            return None
+
     def perform_copy(self):
         sel = self.get_selection_range()
         if not sel:
@@ -3241,6 +3283,7 @@ class Editor:
             self.clipboard.append(self.buffer.lines[end[0]][:end[1]])
         self.status_message = f"Copied {len(self.clipboard)} lines."
         self.mark_pos = None
+        self._set_system_clipboard("\n".join(self.clipboard))
 
     def perform_cut(self):
         self.save_history()
@@ -3252,6 +3295,7 @@ class Editor:
                 self.move_cursor(self.cursor_y, 0)
                 self.modified = True
                 self.set_status("Cut line.", timeout=2)
+                self._set_system_clipboard(self.clipboard[0])
             return
 
         self.perform_copy()
@@ -3270,6 +3314,16 @@ class Editor:
         self.set_status("Cut selection.", timeout=2)
 
     def perform_paste(self):
+        # システムクリップボードからの取得を試みる
+        sys_clip = self._get_system_clipboard()
+        if sys_clip is not None:
+            if sys_clip == "":
+                self.clipboard = []
+            else:
+                self.clipboard = sys_clip.splitlines()
+                if sys_clip.endswith('\n'):
+                    self.clipboard.append('')
+
         if not self.clipboard:
             self.status_message = "Clipboard empty."
             return
@@ -3585,6 +3639,59 @@ class Editor:
              # This special case should not be hit from command mode,
              # as the loop would exit.
              pass
+
+    def _command_delcomm(self):
+        """'delcomm' command: Delete all comments in the current buffer."""
+        if not self.buffer.lines: return
+
+        self.save_history()
+        rules = self.current_syntax_rules
+        
+        # We try to use the 'comments' regex if available
+        comment_regex = None
+        if rules and "comments" in rules:
+            comment_regex = rules["comments"]
+        
+        # Fallback to line_comment
+        if not comment_regex:
+            symbol = rules.get("line_comment") if rules else None
+            if not symbol:
+                symbol = self._prompt_for_input("Comment symbol (e.g. #): ")
+                if not symbol:
+                    self.set_status("Operation cancelled.", timeout=2)
+                    return
+                # Cache it
+                if self.current_syntax_rules is None:
+                    self.current_syntax_rules = {"line_comment": symbol}
+                else:
+                    self.current_syntax_rules["line_comment"] = symbol
+            comment_regex = re.escape(symbol) + ".*"
+
+        try:
+            regex = re.compile(comment_regex)
+        except Exception as e:
+            self.set_status(f"Invalid comment pattern: {e}", timeout=3)
+            return
+
+        new_lines = []
+        count = 0
+        for line in self.buffer.lines:
+            new_line = regex.sub('', line).rstrip()
+            if new_line != line.rstrip():
+                count += 1
+            
+            # If the line was entirely a comment (or empty), and we're not keeping empty lines from comments
+            if line.strip() and not new_line.strip():
+                continue
+                
+            new_lines.append(new_line)
+            
+        if not new_lines:
+            new_lines = [""]
+            
+        self.buffer.lines = new_lines
+        self.modified = True
+        self.set_status(f"Deleted comments from {count} lines.", timeout=3)
 
     def _command_quit(self):
         """'quit'コマンド: エディタを終了する"""
