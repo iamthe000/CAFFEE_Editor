@@ -62,6 +62,7 @@ DEFAULT_CONFIG = {
     "tab_width": 4,
     "history_limit": 50,
     "use_soft_tabs": True,
+    "auto_indent": True,
     "backup_subdir": "backup",
     "backup_count": 5,
     "enable_predictive_text": True, # 予測変換を有効にするか
@@ -4008,24 +4009,37 @@ class Editor:
                 self.stdscr.timeout(-1)
                 
                 # ブラケットペースト開始シーケンス \x1b[200~ の検知
-                if isinstance(key_in, str) and key_in == '\x1b':
+                if key_in == '\x1b' or key_in == 27:
                     self.stdscr.nodelay(True)
                     paste_detected = False
+                    consumed = []
                     try:
                         seq = ""
                         for _ in range(5):
                             ch = self.stdscr.get_wch()
+                            consumed.append(ch)
                             if isinstance(ch, str):
                                 seq += ch
+                            else:
+                                break
+                            
                             if seq == "[200~":
                                 self._handle_bracketed_paste()
                                 paste_detected = True
                                 break
+                            elif not "[200~".startswith(seq):
+                                break
                     except curses.error:
                         pass
+                    
                     self.stdscr.nodelay(False)
                     if paste_detected:
                         continue
+                    else:
+                        # 読みすぎた文字をキューに戻す
+                        for ch in reversed(consumed):
+                            try: curses.unget_wch(ch)
+                            except curses.error: pass
 
             except KeyboardInterrupt:
                 key_in = CTRL_C
@@ -4259,9 +4273,24 @@ class Editor:
                 self.save_history()
                 line = self.buffer.lines[self.cursor_y]
                 indent = ""
-                match = re.match(r'^(\s*)', line)
-                if match:
-                    indent = match.group(1)
+                
+                if self.config.get("auto_indent", True):
+                    # ペースト検知のヒューリスティック：直後に別の入力（バースト）があるか確認
+                    self.stdscr.nodelay(True)
+                    try:
+                        peek = self.stdscr.get_wch()
+                        try: curses.unget_wch(peek)
+                        except curses.error: pass
+                        is_burst = True
+                    except curses.error:
+                        is_burst = False
+                    self.stdscr.nodelay(False)
+
+                    if not is_burst:
+                        match = re.match(r'^(\s*)', line)
+                        if match:
+                            indent = match.group(1)
+
                 self.buffer.lines.insert(self.cursor_y + 1, indent + line[self.cursor_x:])
                 self.buffer.lines[self.cursor_y] = line[:self.cursor_x]
                 self.move_cursor(self.cursor_y + 1, len(indent), update_desired_x=True)
