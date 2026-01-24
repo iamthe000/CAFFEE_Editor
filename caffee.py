@@ -57,7 +57,7 @@ except ImportError:
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "2.6.3"
+VERSION = "2.6.4"
 DEFAULT_CONFIG = {
     "tab_width": 4,
     "history_limit": 50,
@@ -3279,25 +3279,27 @@ class Editor:
                 # PowerShellを使用してUTF-8対応で設定
                 subprocess.run(['powershell.exe', '-NoProfile', '-Command', 
                                 '[Console]::InputEncoding = [System.Text.Encoding]::UTF8; $input | Set-Clipboard'], 
-                               input=text.encode('utf-8'), check=True)
+                               input=text.encode('utf-8'), check=True, capture_output=True)
             elif system == "Darwin":
-                subprocess.run(['pbcopy'], input=text.encode('utf-8'), check=True)
+                subprocess.run(['pbcopy'], input=text.encode('utf-8'), check=True, capture_output=True)
             elif system == "Linux":
                 # Wayland (wl-copy) -> xclip -> xsel
                 try:
-                    subprocess.run(['wl-copy'], input=text.encode('utf-8'), check=True)
+                    subprocess.run(['wl-copy'], input=text.encode('utf-8'), check=True, capture_output=True)
                     return
                 except (subprocess.CalledProcessError, FileNotFoundError):
                     pass
                 try:
-                    subprocess.run(['xclip', '-selection', 'clipboard'], input=text.encode('utf-8'), check=True)
+                    subprocess.run(['xclip', '-selection', 'clipboard'], input=text.encode('utf-8'), check=True, capture_output=True)
                 except (subprocess.CalledProcessError, FileNotFoundError):
                     try:
-                        subprocess.run(['xsel', '--clipboard', '--input'], input=text.encode('utf-8'), check=True)
+                        subprocess.run(['xsel', '--clipboard', '--input'], input=text.encode('utf-8'), check=True, capture_output=True)
                     except (subprocess.CalledProcessError, FileNotFoundError):
-                        pass
-        except Exception:
-            pass
+                        if hasattr(self, 'set_status'):
+                            self.set_status("Clipboard tool (wl-copy/xclip/xsel) not found.", timeout=3)
+        except Exception as e:
+            if hasattr(self, 'set_status'):
+                self.set_status(f"Clipboard Error: {e}", timeout=3)
 
     def _get_system_clipboard(self):
         """システムクリップボードからテキストを取得する"""
@@ -3307,21 +3309,21 @@ class Editor:
                 # powershellを使用。UTF-8出力で-Rawで改行などを保持。
                 out = subprocess.check_output(['powershell.exe', '-NoProfile', '-Command', 
                                               '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Clipboard -Raw'], 
-                                             text=False)
+                                             text=False, stderr=subprocess.DEVNULL)
                 return out.decode('utf-8').replace('\r\n', '\n')
             elif system == "Darwin":
-                return subprocess.check_output(['pbpaste'], text=True).replace('\r\n', '\n')
+                return subprocess.check_output(['pbpaste'], text=True, stderr=subprocess.DEVNULL).replace('\r\n', '\n')
             elif system == "Linux":
                 # Wayland (wl-paste) -> xclip -> xsel
                 try:
-                    return subprocess.check_output(['wl-paste', '--no-newline'], text=True).replace('\r\n', '\n')
+                    return subprocess.check_output(['wl-paste', '--no-newline'], text=True, stderr=subprocess.DEVNULL).replace('\r\n', '\n')
                 except (subprocess.CalledProcessError, FileNotFoundError):
                     pass
                 try:
-                    return subprocess.check_output(['xclip', '-selection', 'clipboard', '-o'], text=True).replace('\r\n', '\n')
+                    return subprocess.check_output(['xclip', '-selection', 'clipboard', '-o'], text=True, stderr=subprocess.DEVNULL).replace('\r\n', '\n')
                 except (subprocess.CalledProcessError, FileNotFoundError):
                     try:
-                        return subprocess.check_output(['xsel', '--clipboard', '--output'], text=True).replace('\r\n', '\n')
+                        return subprocess.check_output(['xsel', '--clipboard', '--output'], text=True, stderr=subprocess.DEVNULL).replace('\r\n', '\n')
                     except (subprocess.CalledProcessError, FileNotFoundError):
                         return None
         except Exception:
@@ -3383,14 +3385,16 @@ class Editor:
         if not self.clipboard:
             self.status_message = "Clipboard empty."
             return
+        
         self.save_history()
         current_line = self.buffer.lines[self.cursor_y]
         prefix = current_line[:self.cursor_x]
         suffix = current_line[self.cursor_x:]
+        
         if len(self.clipboard) == 1:
             new_line = prefix + self.clipboard[0] + suffix
             self.buffer.lines[self.cursor_y] = new_line
-            self.move_cursor(self.cursor_y, self.cursor_x + len(self.clipboard[0]))
+            self.move_cursor(self.cursor_y, self.cursor_x + len(self.clipboard[0]), update_desired_x=True)
         else:
             self.buffer.lines[self.cursor_y] = prefix + self.clipboard[0]
             for i in range(1, len(self.clipboard) - 1):
@@ -3398,9 +3402,56 @@ class Editor:
             self.buffer.lines.insert(self.cursor_y + len(self.clipboard) - 1, self.clipboard[-1] + suffix)
             new_y = self.cursor_y + len(self.clipboard) - 1
             new_x = len(self.clipboard[-1])
-            self.move_cursor(new_y, new_x)
+            self.move_cursor(new_y, new_x, update_desired_x=True)
+            
         self.modified = True
-        self.status_message = "Pasted."
+        self.set_status("Pasted from system clipboard.", timeout=2)
+
+    def _handle_bracketed_paste(self):
+        """ブラケットペーストモードでの入力を処理する"""
+        text = ""
+        self.stdscr.nodelay(True)
+        start_time = time.time()
+        while time.time() - start_time < 2.0: # 2秒タイムアウト
+            try:
+                ch = self.stdscr.get_wch()
+                if isinstance(ch, str):
+                    text += ch
+                    if text.endswith("\x1b[201~"):
+                        text = text[:-6]
+                        break
+                start_time = time.time() # 入力がある間はタイムアウトをリセット
+            except curses.error:
+                time.sleep(0.01)
+        self.stdscr.nodelay(False)
+        
+        if text:
+            # 改行コードの正規化
+            text = text.replace('\r\n', '\n').replace('\r', '\n')
+            self._insert_text_at_cursor(text)
+
+    def _insert_text_at_cursor(self, text):
+        """カーソル位置にテキストを挿入する（自動インデントなし）"""
+        if not text: return
+        self.save_history()
+        lines = text.split('\n')
+        
+        current_line = self.buffer.lines[self.cursor_y]
+        prefix = current_line[:self.cursor_x]
+        suffix = current_line[self.cursor_x:]
+        
+        if len(lines) == 1:
+            self.buffer.lines[self.cursor_y] = prefix + lines[0] + suffix
+            self.move_cursor(self.cursor_y, self.cursor_x + len(lines[0]), update_desired_x=True)
+        else:
+            self.buffer.lines[self.cursor_y] = prefix + lines[0]
+            for i in range(1, len(lines) - 1):
+                self.buffer.lines.insert(self.cursor_y + i, lines[i])
+            self.buffer.lines.insert(self.cursor_y + len(lines) - 1, lines[-1] + suffix)
+            self.move_cursor(self.cursor_y + len(lines) - 1, len(lines[-1]), update_desired_x=True)
+            
+        self.modified = True
+        self.set_status(f"Pasted {len(lines)} lines from terminal.", timeout=2)
 
     def toggle_comment(self):
         if not self.buffer.lines: return
@@ -3955,6 +4006,27 @@ class Editor:
                     
                 key_in = self.stdscr.get_wch()
                 self.stdscr.timeout(-1)
+                
+                # ブラケットペースト開始シーケンス \x1b[200~ の検知
+                if isinstance(key_in, str) and key_in == '\x1b':
+                    self.stdscr.nodelay(True)
+                    paste_detected = False
+                    try:
+                        seq = ""
+                        for _ in range(5):
+                            ch = self.stdscr.get_wch()
+                            if isinstance(ch, str):
+                                seq += ch
+                            if seq == "[200~":
+                                self._handle_bracketed_paste()
+                                paste_detected = True
+                                break
+                    except curses.error:
+                        pass
+                    self.stdscr.nodelay(False)
+                    if paste_detected:
+                        continue
+
             except KeyboardInterrupt:
                 key_in = CTRL_C
             except curses.error: 
@@ -3991,7 +4063,7 @@ class Editor:
                 self.new_tab()
                 continue
             elif key_code == CTRL_V:
-                self.toggle_relative_linenum()
+                self.perform_paste()
                 continue
             elif key_code == CTRL_L:
                 self.next_tab()
@@ -4138,7 +4210,7 @@ class Editor:
             elif key_code == CTRL_Y: self.delete_line()
             elif key_code == CTRL_P: self.enter_command_mode()
             elif key_code == CTRL_K: self.perform_cut()
-            elif key_code == CTRL_U: self.perform_paste()
+            elif key_code == CTRL_U: self.toggle_relative_linenum()
             elif key_code == CTRL_Z: self.undo()
             elif key_code == CTRL_R: self.redo()
             elif key_code == curses.KEY_UP:
@@ -4216,6 +4288,10 @@ class Editor:
 def main(stdscr, start_time):
     os.environ.setdefault('ESCDELAY', '25')
     curses.raw()
+    # ブラケットペーストモードを有効化
+    sys.stdout.write("\x1b[?200h")
+    sys.stdout.flush()
+
     fn = sys.argv[1] if len(sys.argv) > 1 else None
     try:
         Editor(stdscr, fn, start_time=start_time).main_loop()
@@ -4224,6 +4300,10 @@ def main(stdscr, start_time):
         curses.endwin()
         print(f"An unexpected error occurred: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
+    finally:
+        # ブラケットペーストモードを無効化
+        sys.stdout.write("\x1b[?200l")
+        sys.stdout.flush()
 
 def start_app():
     start_time = time.time()
