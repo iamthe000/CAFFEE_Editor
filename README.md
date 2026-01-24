@@ -49,7 +49,7 @@
 - **Multi-Tab Editing** - Handle multiple files simultaneously with a visual tab system (`Ctrl+S`, `Ctrl+L`, `Ctrl+X`).
 - **Breadcrumb Bar** - Real-time display of file paths and code symbols (functions/classes) for better context.
 - **Vim Mode** - Optional modal editing support for high-efficiency navigation and text manipulation.
-- **Relative Line Numbers** (`Ctrl+V`) - Toggle relative line numbers to speed up navigation.
+- **Relative Line Numbers** (`Ctrl+U`) - Toggle relative line numbers to speed up navigation.
 - **Nerd Font Integration** - High-quality icons with an automated font installation helper.
 - **Smart Horizontal Scrolling** - Nano-style smooth scrolling for long lines.
 
@@ -116,8 +116,9 @@ For significantly faster startup, compile with Nuitka. See the [Nuitka Compilati
 | `Ctrl+Z` | Undo |
 | `Ctrl+R` | Redo |
 | `Ctrl+K` | Cut (line or selection) |
-| `Ctrl+U` | Paste |
+| `Ctrl+V` | Paste (System Clipboard Sync) |
 | `Ctrl+C` | Copy selection |
+| `Ctrl+U` | Toggle relative line numbers |
 | `Ctrl+Y` | Delete current line |
 | `Ctrl+/` | Toggle comment |
 
@@ -135,7 +136,7 @@ For significantly faster startup, compile with Nuitka. See the [Nuitka Compilati
 |-----|--------|
 | `Ctrl+F` | Toggle file explorer |
 | `Ctrl+N` | Toggle integrated terminal |
-| `Ctrl+V` | Toggle relative line numbers |
+| `Ctrl+U` | Toggle relative line numbers |
 | `Ctrl+T` | Insert template |
 | `Ctrl+B` | Build/Run current file |
 | `Ctrl+D` | Show Git diff for the current file |
