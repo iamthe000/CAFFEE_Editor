@@ -30,8 +30,7 @@
 **CAFFEE** is a terminal text editor written in Python, designed for a simple, extensible, and efficient editing experience with modern IDE-like features.
 
 ## Table of Contents
-- [✨ What's New](#-whats-new-in-v240)
-- [💡 Core Features](#-core-features)
+- [💡 Features](#-features)
 - [💻 Installation](#-installation)
 - [⌨️ Keybindings](#️-keybindings)
 - [🚀 Command Mode](#-command-mode)
@@ -44,50 +43,31 @@
 
 ---
 
-## ✨ What's New in v2.4.0
+## 💡 Features
 
-### 🎨 **Modern UI Enhancements**
-- **Interactive Start Screen** - Welcome screen with quick access to settings, plugins, and file explorer.
-- **Tab Bar System** - Multi-file editing with visual tab management.
-- **Split Panel Layout** - Toggle file explorer and integrated terminal panels.
-- **Enhanced Visual Design** - Improved color schemes and status indicators.
-
-### 🚀 **Productivity Features**
-- **Git Integration** - View the current Git branch, file status in each tab (`~`: modified, `+`: new/untracked), and open a diff view (`Ctrl+D`).
-- **Command Mode** (`Ctrl+P`) - Execute commands like `:open`, `:saveas`, `:set`, and `:diff`.
-- **Predictive Text** - Get auto-completion suggestions from words in the current buffer.
-- **Enhanced File Explorer** (`Ctrl+F`) - Browse and manage files with advanced features:
-    - Sort by name, date, or size (`s` key).
-    - Toggle ascending/descending order (`o` key).
-    - Show/hide hidden files (`h` key).
-    - Search with wildcards (`/` key).
-    - Create, delete, and rename files/directories (`a`, `d`, `r` keys).
-- **Code Templates** (`Ctrl+T`) - Insert language-specific code snippets.
-- **Built-in Terminal** (`Ctrl+N`) - Execute commands directly from the editor.
-- **Plugin & Settings Manager** - Interactive menus to manage plugins and editor settings.
-- **Build & Run** (`Ctrl+B`) - Automatic compilation and execution for various languages.
+### 🎨 **Modern UI & Navigation**
+- **Multi-Tab Editing** - Handle multiple files simultaneously with a visual tab system (`Ctrl+S`, `Ctrl+L`, `Ctrl+X`).
+- **Breadcrumb Bar** - Real-time display of file paths and code symbols (functions/classes) for better context.
+- **Vim Mode** - Optional modal editing support for high-efficiency navigation and text manipulation.
+- **Relative Line Numbers** (`Ctrl+V`) - Toggle relative line numbers to speed up navigation.
+- **Nerd Font Integration** - High-quality icons with an automated font installation helper.
 - **Smart Horizontal Scrolling** - Nano-style smooth scrolling for long lines.
-- **Full-Width Character Support** - Proper handling of Japanese and other wide characters.
 
-### 🎨 **Syntax Highlighting**
-- Python, JavaScript, C/C++, Go, Rust, HTML, Markdown, and Git Diff support.
-- Customizable color schemes via `setting.json`.
+### 🚀 **Productivity & Editing**
+- **Interactive Search & Replace** (`Ctrl+W`) - VSCode-style interface for finding and replacing text, including "Replace All" (`Ctrl+A`).
+- **System Clipboard Sync** - Seamless copy-paste synchronization across Windows, macOS, and Linux.
+- **Predictive Text** - Intelligent auto-completion suggestions powered by buffer content.
+- **Git Integration** - View branch names, file status markers (`~`: modified, `+`: new), and unified diffs (`Ctrl+D`).
+- **Enhanced File Explorer** (`Ctrl+F`) - Browse and manage files with sorting, wildcard search, and full-screen mode.
+- **Integrated Terminal** (`Ctrl+N`) - Execute shell commands directly from the editor.
+- **Command Mode** (`Ctrl+P`) - Execute powerful commands like `:open`, `:saveas`, `:set`, and `:delcomm`.
 
-### 📑 **Multi-Tab Editing**
-- `Ctrl+S` - Create a new tab or return to the start screen.
-- `Ctrl+L` - Switch to the next tab.
-- `Ctrl+X` - Close the current tab (prompts if unsaved).
-
----
-
-## 💡 Core Features
-
-- **Small and focused** editing experience.
-- **Undo/Redo** history with a configurable limit.
-- **Mark-based selection** and clipboard operations (cut/copy/paste).
-- **Line operations** (delete, comment/uncomment, goto).
-- **Atomic file saving** with automatic backup creation.
-- **Extensible plugin system** and JSON configuration.
+### ⚙️ **Extensibility & Advanced Support**
+- **Automated Build & Run** (`Ctrl+B`) - Optimized templates and build commands for 20+ programming languages.
+- **Advanced Syntax Highlighting** - Support for Python, JS/TS, C/C++, Go, Rust, Java, Ruby, Swift, and more.
+- **Plugin System** - Extend functionality with custom Python scripts.
+- **Atomic File Saving** - Safe file operations with automatic backup creation.
+- **Undo/Redo** - Comprehensive history management with configurable limits.
 
 ---
 
@@ -155,6 +135,7 @@ For significantly faster startup, compile with Nuitka. See the [Nuitka Compilati
 |-----|--------|
 | `Ctrl+F` | Toggle file explorer |
 | `Ctrl+N` | Toggle integrated terminal |
+| `Ctrl+V` | Toggle relative line numbers |
 | `Ctrl+T` | Insert template |
 | `Ctrl+B` | Build/Run current file |
 | `Ctrl+D` | Show Git diff for the current file |
@@ -176,6 +157,7 @@ Press `Ctrl+P` to enter Command Mode, then type a command and press Enter.
 | `new` | | Create a new empty tab. |
 | `set <key> <val>` | | Change a setting (e.g., `set tab_width 2`). |
 | `diff` | | Show a Git diff of the current file in a new tab. |
+| `delcomm` | | Remove all comments from the current buffer. |
 
 ---
 
