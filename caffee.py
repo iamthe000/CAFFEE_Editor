@@ -2244,15 +2244,15 @@ class Editor:
         if self.vim_state == 'normal':
             # Handle 'yy' command
             if self.vim_last_key == 'y' and char_input == 'y':
-                self.clipboard = [self.buffer.lines[self.cursor_y]]
-                self.vim_clipboard_type = 'line'
+                line_content = self.buffer.lines[self.cursor_y]
+                self._update_clipboard([line_content], is_line=True)
                 self.set_status("Yanked 1 line", timeout=2)
                 self.vim_last_key = None
                 return
             # Handle 'dd' command
             if self.vim_last_key == 'd' and char_input == 'd':
-                self.clipboard = [self.buffer.lines[self.cursor_y]]
-                self.vim_clipboard_type = 'line'
+                line_content = self.buffer.lines[self.cursor_y]
+                self._update_clipboard([line_content], is_line=True)
                 self.delete_line()
                 self.vim_last_key = None
                 return
@@ -2274,13 +2274,33 @@ class Editor:
                 self.vim_last_key = 'd' # Start of a sequence
             elif char_input == 'y':
                 self.vim_last_key = 'y'
-            elif char_input == 'p':
+            elif char_input == 'x':
+                if self.buffer.lines:
+                    self.save_history()
+                    line = self.buffer.lines[self.cursor_y]
+                    if line and self.cursor_x < len(line):
+                        char = line[self.cursor_x]
+                        self._update_clipboard([char], is_line=False)
+                        self.buffer.lines[self.cursor_y] = line[:self.cursor_x] + line[self.cursor_x+1:]
+                        self.modified = True
+            elif char_input == 'p' or char_input == 'P':
+                # システムクリップボードとの同期
+                self._sync_from_system_clipboard()
+
                 if self.clipboard:
                     self.save_history()
                     if self.vim_clipboard_type == 'line':
-                        self.buffer.lines[self.cursor_y+1:self.cursor_y+1] = self.clipboard
-                        self.move_cursor(self.cursor_y + 1, 0, update_desired_x=True)
+                        # 行単位の貼り付け
+                        content_to_insert = self.clipboard[:-1] if self.clipboard and self.clipboard[-1] == '' else self.clipboard
+                        insert_y = self.cursor_y + 1 if char_input == 'p' else self.cursor_y
+                        self.buffer.lines[insert_y:insert_y] = content_to_insert
+                        self.move_cursor(insert_y, 0, update_desired_x=True)
                     else:
+                        if char_input == 'p':
+                            # charwise p: pastes after cursor
+                            line = self.buffer.lines[self.cursor_y]
+                            if self.cursor_x < len(line):
+                                self.move_cursor(self.cursor_y, self.cursor_x + 1)
                         self.perform_paste()
                     self.modified = True
 
@@ -3227,16 +3247,48 @@ class Editor:
             # 右端に到達した場合、見える範囲を右にシフト
             self.col_offset = self.cursor_x - actual_edit_w + 1
 
+    def _update_clipboard(self, lines, is_line=False):
+        """内部クリップボードとシステムクリップボードを更新する"""
+        self.clipboard = lines
+        self.vim_clipboard_type = 'line' if is_line else 'char'
+        text = "\n".join(lines)
+        if is_line and not text.endswith('\n'):
+            text += '\n'
+        self._set_system_clipboard(text)
+
+    def _sync_from_system_clipboard(self):
+        """システムクリップボードから内部クリップボードを同期する"""
+        sys_clip = self._get_system_clipboard()
+        if sys_clip is not None:
+            if sys_clip == "":
+                self.clipboard = []
+            else:
+                self.clipboard = sys_clip.splitlines()
+                if sys_clip.endswith('\n'):
+                    self.clipboard.append('')
+                    self.vim_clipboard_type = 'line'
+                else:
+                    self.vim_clipboard_type = 'char'
+        return self.clipboard
+
     def _set_system_clipboard(self, text):
         """システムクリップボードにテキストを設定する"""
         system = platform.system()
         try:
             if system == "Windows":
-                # PowerShellを使用してUnicode対応で設定
-                subprocess.run(['powershell.exe', '-NoProfile', '-Command', '$input | Set-Clipboard'], input=text.encode('utf-8'), check=True, shell=True)
+                # PowerShellを使用してUTF-8対応で設定
+                subprocess.run(['powershell.exe', '-NoProfile', '-Command', 
+                                '[Console]::InputEncoding = [System.Text.Encoding]::UTF8; $input | Set-Clipboard'], 
+                               input=text.encode('utf-8'), check=True)
             elif system == "Darwin":
                 subprocess.run(['pbcopy'], input=text.encode('utf-8'), check=True)
             elif system == "Linux":
+                # Wayland (wl-copy) -> xclip -> xsel
+                try:
+                    subprocess.run(['wl-copy'], input=text.encode('utf-8'), check=True)
+                    return
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    pass
                 try:
                     subprocess.run(['xclip', '-selection', 'clipboard'], input=text.encode('utf-8'), check=True)
                 except (subprocess.CalledProcessError, FileNotFoundError):
@@ -3252,11 +3304,19 @@ class Editor:
         system = platform.system()
         try:
             if system == "Windows":
-                # powershellを使用。-Rawで改行などを保持。
-                return subprocess.check_output(['powershell.exe', '-NoProfile', '-Command', 'Get-Clipboard -Raw'], text=True, shell=True).replace('\r\n', '\n')
+                # powershellを使用。UTF-8出力で-Rawで改行などを保持。
+                out = subprocess.check_output(['powershell.exe', '-NoProfile', '-Command', 
+                                              '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Clipboard -Raw'], 
+                                             text=False)
+                return out.decode('utf-8').replace('\r\n', '\n')
             elif system == "Darwin":
                 return subprocess.check_output(['pbpaste'], text=True).replace('\r\n', '\n')
             elif system == "Linux":
+                # Wayland (wl-paste) -> xclip -> xsel
+                try:
+                    return subprocess.check_output(['wl-paste', '--no-newline'], text=True).replace('\r\n', '\n')
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    pass
                 try:
                     return subprocess.check_output(['xclip', '-selection', 'clipboard', '-o'], text=True).replace('\r\n', '\n')
                 except (subprocess.CalledProcessError, FileNotFoundError):
@@ -3273,29 +3333,32 @@ class Editor:
             self.status_message = "No selection to copy."
             return
         start, end = sel
-        self.clipboard = []
+        lines = []
         if start[0] == end[0]:
-            self.clipboard.append(self.buffer.lines[start[0]][start[1]:end[1]])
+            lines.append(self.buffer.lines[start[0]][start[1]:end[1]])
         else:
-            self.clipboard.append(self.buffer.lines[start[0]][start[1]:])
+            lines.append(self.buffer.lines[start[0]][start[1]:])
             for i in range(start[0] + 1, end[0]):
-                self.clipboard.append(self.buffer.lines[i])
-            self.clipboard.append(self.buffer.lines[end[0]][:end[1]])
-        self.status_message = f"Copied {len(self.clipboard)} lines."
+                lines.append(self.buffer.lines[i])
+            lines.append(self.buffer.lines[end[0]][:end[1]])
+        
+        # 選択範囲全体を1行としてコピーした場合（末尾が空文字なら行単位扱い）
+        is_line = len(lines) > 1 and lines[-1] == ''
+        self._update_clipboard(lines, is_line)
+        self.status_message = f"Copied {len(lines) if not is_line else len(lines)-1} lines."
         self.mark_pos = None
-        self._set_system_clipboard("\n".join(self.clipboard))
 
     def perform_cut(self):
         self.save_history()
         sel = self.get_selection_range()
         if not sel:
             if len(self.buffer) > 0:
-                self.clipboard = [self.buffer.lines.pop(self.cursor_y)]
+                line_content = self.buffer.lines.pop(self.cursor_y)
                 if not self.buffer.lines: self.buffer.lines = [""]
                 self.move_cursor(self.cursor_y, 0)
                 self.modified = True
                 self.set_status("Cut line.", timeout=2)
-                self._set_system_clipboard(self.clipboard[0])
+                self._update_clipboard([line_content], is_line=True)
             return
 
         self.perform_copy()
@@ -3314,15 +3377,8 @@ class Editor:
         self.set_status("Cut selection.", timeout=2)
 
     def perform_paste(self):
-        # システムクリップボードからの取得を試みる
-        sys_clip = self._get_system_clipboard()
-        if sys_clip is not None:
-            if sys_clip == "":
-                self.clipboard = []
-            else:
-                self.clipboard = sys_clip.splitlines()
-                if sys_clip.endswith('\n'):
-                    self.clipboard.append('')
+        # システムクリップボードとの同期を試みる
+        self._sync_from_system_clipboard()
 
         if not self.clipboard:
             self.status_message = "Clipboard empty."
