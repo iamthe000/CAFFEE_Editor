@@ -173,6 +173,7 @@ User settings are stored in `~/.caffee_setting/setting.json`. You can edit this 
   "tab_width": 4,
   "history_limit": 50,
   "use_soft_tabs": true,
+  "auto_indent": true,
   "backup_count": 5,
   "enable_predictive_text": true,
   
@@ -199,6 +200,7 @@ User settings are stored in `~/.caffee_setting/setting.json`. You can edit this 
 ```
 
 ### Key Configuration Options
+- **`auto_indent`**: Enable/disable automatic indentation.
 - **`enable_predictive_text`**: Enable/disable auto-completion suggestions.
 - **`explorer_show_details`**: Show file size and modification date in the explorer.
 - **`displayed_keybindings`**: Customize which keybindings appear in the footer bar.
