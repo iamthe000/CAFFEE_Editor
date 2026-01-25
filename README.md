@@ -153,6 +153,8 @@ Press `Ctrl+P` to enter Command Mode, then type a command and press Enter.
 | `open <file>`| `o <file>` | Open a file in a new tab. |
 | `save` | `w` | Save the current file. |
 | `saveas <file>` | | Save the current file with a new name. |
+| `copy` | | Copy the selected range to the system clipboard. |
+| `paste` | | Paste content from the system clipboard. |
 | `close` | `q` | Close the current tab. |
 | `quit` | `qa` | Exit the editor (prompts for unsaved files). |
 | `new` | | Create a new empty tab. |
