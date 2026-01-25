@@ -159,6 +159,15 @@ Press `Ctrl+P` to enter Command Mode, then type a command and press Enter.
 | `quit` | `qa` | Exit the editor (prompts for unsaved files). |
 | `new` | | Create a new empty tab. |
 | `set <key> <val>` | | Change a setting (e.g., `set tab_width 2`). |
+| `undo` | | Undo the last action. |
+| `redo` | | Redo the last undone action. |
+| `goto <line>` | | Jump to the specified line number. |
+| `next` | `tabn` | Switch to the next tab. |
+| `prev` | `tabp` | Switch to the previous tab. |
+| `find <query>` | | Search for the specified query. |
+| `replace <old> <new>` | | Replace occurrences of `<old>` with `<new>`. |
+| `expw <width>` | `explorer_width` | Set the file explorer width. |
+| `termh <height>` | `terminal_height` | Set the integrated terminal height. |
 | `diff` | | Show a Git diff of the current file in a new tab. |
 | `delcomm` | | Remove all comments from the current buffer. |
 
