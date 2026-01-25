@@ -57,7 +57,7 @@ except ImportError:
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "2.8.0"
+VERSION = "2.8.1"
 DEFAULT_CONFIG = {
     "tab_width": 4,
     "history_limit": 50,
@@ -2835,11 +2835,12 @@ class Editor:
 
     def get_terminal_rect(self):
         if not self.show_terminal: return 0,0,0,0
-        _, _, edit_h, _ = self.get_edit_rect()
-        y = self.tab_bar_height + self.header_height + edit_h
+        breadcrumb_h = 1 if self.config.get("show_breadcrumb", True) else 0
+        edit_y, _, edit_h, _ = self.get_edit_rect()
+        y = edit_y + edit_h
         x = 0
         w = self.width
-        total_h = self.height - self.tab_bar_height - self.header_height - self.status_height - self.menu_height
+        total_h = self.height - self.tab_bar_height - self.header_height - breadcrumb_h - self.status_height - self.menu_height
         h = min(self.terminal_height, total_h - 5)
         return y, x, h, w
 
