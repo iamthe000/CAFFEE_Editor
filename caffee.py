@@ -57,7 +57,7 @@ except ImportError:
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "2.8.1"
+VERSION = "2.8.2"
 DEFAULT_CONFIG = {
     "tab_width": 4,
     "history_limit": 50,
@@ -1540,6 +1540,7 @@ class Editor:
             'termh': self._command_terminal_height,
             'explorer_width': self._command_explorer_width,
             'terminal_height': self._command_terminal_height,
+            'template': self._command_template,
         }
 
         self.init_colors()
@@ -3935,6 +3936,23 @@ class Editor:
     def _command_new(self):
         """'new'コマンド: 新しい空のタブを作成"""
         self.new_tab()
+
+    def _command_template(self, *args):
+        """'template'コマンド: 言語名でテンプレートを挿入するか、選択画面を表示する"""
+        lang = args[0] if args else None
+        templates = self.config.get("templates", {})
+        if not templates:
+            self.set_status("テンプレートが定義されていません。", timeout=3)
+            return
+
+        if lang:
+            if lang in templates:
+                self.insert_text(templates[lang])
+                self.set_status(f"'{lang}' テンプレートを挿入しました。", timeout=3)
+            else:
+                self.set_status(f"'{lang}' テンプレートが見つかりません。", timeout=3)
+        else:
+            self._select_and_insert_template()
 
     def _command_set(self, key=None, value=None):
         """'set'コマンド: 設定値を変更"""
