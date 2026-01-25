@@ -1516,6 +1516,8 @@ class Editor:
             'save': self._command_save,
             'w': self._command_save,
             'saveas': self._command_saveas,
+            'copy': self._command_copy,
+            'paste': self._command_paste,
             'close': self._command_close,
             'q': self._command_close,
             'quit': self._command_quit,
@@ -3740,6 +3742,14 @@ class Editor:
         # Set the new filename for the current tab and then save.
         self.filename = filename
         self.save_file()
+
+    def _command_copy(self, *args):
+        """'copy'コマンド: 選択範囲をコピー"""
+        self.perform_copy()
+
+    def _command_paste(self, *args):
+        """'paste'コマンド: クリップボードから貼り付け"""
+        self.perform_paste()
 
     def _command_close(self):
         """'close'コマンド: 現在のタブを閉じる"""
