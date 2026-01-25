@@ -1527,6 +1527,19 @@ class Editor:
             'diff': self.show_diff,
             'delcomm': self._command_delcomm,
             'deletecomments': self._command_delcomm,
+            'undo': self._command_undo,
+            'redo': self._command_redo,
+            'goto': self._command_goto,
+            'next': self.next_tab,
+            'prev': self.prev_tab,
+            'tabn': self.next_tab,
+            'tabp': self.prev_tab,
+            'find': self._command_find,
+            'replace': self._command_replace,
+            'expw': self._command_explorer_width,
+            'termh': self._command_terminal_height,
+            'explorer_width': self._command_explorer_width,
+            'terminal_height': self._command_terminal_height,
         }
 
         self.init_colors()
@@ -1663,9 +1676,13 @@ class Editor:
             self.active_tab_idx = len(self.tabs) - 1
         return False
 
-    def next_tab(self):
+    def next_tab(self, *args):
         if not self.tabs: return
         self.active_tab_idx = (self.active_tab_idx + 1) % len(self.tabs)
+
+    def prev_tab(self, *args):
+        if not self.tabs: return
+        self.active_tab_idx = (self.active_tab_idx - 1 + len(self.tabs)) % len(self.tabs)
 
     def _get_color(self, color_name):
         return COLOR_MAP.get(color_name.upper(), -1)
@@ -2137,7 +2154,7 @@ class Editor:
                 # Check if the file is known to git
                 subprocess.run(
                     ['git', 'ls-files', '--error-unmatch', self.filename],
-                    capture_output=True, text=True, check=True, stderr=subprocess.DEVNULL
+                    stdout=subprocess.DEVNULL, text=True, check=True, stderr=subprocess.DEVNULL
                 )
                 is_git_tracked = True
             except (subprocess.CalledProcessError, FileNotFoundError):
@@ -2222,7 +2239,7 @@ class Editor:
         try:
             subprocess.run(
                 ['git', 'ls-files', '--error-unmatch', abs_path],
-                capture_output=True, text=True, cwd=repo_dir, check=True, stderr=subprocess.DEVNULL
+                stdout=subprocess.DEVNULL, text=True, cwd=repo_dir, check=True, stderr=subprocess.DEVNULL
             )
             diff_proc = subprocess.run(
                 ['git', 'diff-index', '--quiet', 'HEAD', '--', abs_path],
@@ -3759,6 +3776,52 @@ class Editor:
         self.filename = filename
         self.save_file()
 
+    def _command_explorer_width(self, width=None):
+        """'expw'コマンド: エクスプローラーの幅を設定"""
+        if width is None:
+            self.set_status(f"Current explorer_width: {self.explorer_width}", timeout=3)
+            return
+        try:
+            self.explorer_width = int(width)
+            self.config["explorer_width"] = self.explorer_width
+            self.set_status(f"Explorer width set to {self.explorer_width}")
+            self.redraw_screen()
+        except ValueError:
+            self.set_status("Invalid width value.", timeout=3)
+
+    def _command_terminal_height(self, height=None):
+        """'termh'コマンド: ターミナルの高さを設定"""
+        if height is None:
+            self.set_status(f"Current terminal_height: {self.terminal_height}", timeout=3)
+            return
+        try:
+            self.terminal_height = int(height)
+            self.config["terminal_height"] = self.terminal_height
+            self.set_status(f"Terminal height set to {self.terminal_height}")
+            self.redraw_screen()
+        except ValueError:
+            self.set_status("Invalid height value.", timeout=3)
+
+    def _command_undo(self, *args):
+        """'undo'コマンド: 元に戻す"""
+        self.undo()
+
+    def _command_redo(self, *args):
+        """'redo'コマンド: やり直し"""
+        self.redo()
+
+    def _command_goto(self, line=None, *args):
+        """'goto'コマンド: 指定行へ移動"""
+        if line is None:
+            self.goto_line()
+        else:
+            try:
+                n = int(line)
+                self.move_cursor(max(0, min(n - 1, len(self.buffer) - 1)), 0, update_desired_x=True)
+                self.set_status(f"Goto {n}", timeout=2)
+            except ValueError:
+                self.set_status("Invalid line number.", timeout=2)
+
     def _command_copy(self, *args):
         """'copy'コマンド: 選択範囲をコピー"""
         self.perform_copy()
@@ -3767,14 +3830,37 @@ class Editor:
         """'paste'コマンド: クリップボードから貼り付け"""
         self.perform_paste()
 
-    def _command_close(self):
+    def _command_close(self, *args):
         """'close'コマンド: 現在のタブを閉じる"""
         if self.close_current_tab():
              # This special case should not be hit from command mode,
              # as the loop would exit.
              pass
 
-    def _command_delcomm(self):
+    def _command_find(self, query=None, *args):
+        """'find'コマンド: 検索を開始"""
+        self.search_mode = True
+        self.search_input_focused = "search"
+        if query:
+            self.search_query = query
+            self._find_all_matches()
+        else:
+            self.set_status("Search mode enabled. Type query below.", timeout=3)
+
+    def _command_replace(self, old=None, new=None, *args):
+        """'replace'コマンド: 置換を開始"""
+        self.search_mode = True
+        if old:
+            self.search_query = old
+            self.search_input_focused = "replace"
+            if new:
+                self.replace_query = new
+            self._find_all_matches()
+        else:
+            self.search_input_focused = "search"
+            self.set_status("Replace mode enabled.", timeout=3)
+
+    def _command_delcomm(self, *args):
         """'delcomm' command: Delete all comments in the current buffer."""
         if not self.buffer.lines: return
 
@@ -3868,6 +3954,12 @@ class Editor:
                 self.set_status(f"Set {key} = {new_value}", timeout=3)
                 # Some settings require redraw or re-init
                 if key == 'tab_width':
+                    self.redraw_screen()
+                elif key == 'explorer_width':
+                    self.explorer_width = new_value
+                    self.redraw_screen()
+                elif key == 'terminal_height':
+                    self.terminal_height = new_value
                     self.redraw_screen()
                 if key in self.config.get("colors", {}):
                     self.init_colors()
