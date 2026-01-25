@@ -170,6 +170,7 @@ Press `Ctrl+P` to enter Command Mode, then type a command and press Enter.
 | `termh <height>` | `terminal_height` | Set the integrated terminal height. |
 | `diff` | | Show a Git diff of the current file in a new tab. |
 | `delcomm` | | Remove all comments from the current buffer. |
+| `template <lang>` | | Insert a template for the specified language. |
 
 ---
 
