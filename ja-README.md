@@ -160,6 +160,15 @@ pip install caffee --upgrade
 | `quit` | `qa` | エディタを終了する（未保存のファイルは確認）。 |
 | `new` | | 新しい空のタブを作成する。 |
 | `set <key> <val>` | | 設定を変更する (例: `set tab_width 2`)。 |
+| `undo` | | 最後の操作を取り消す。 |
+| `redo` | | 取り消した操作をやり直す。 |
+| `goto <line>` | | 指定した行番号にジャンプする。 |
+| `next` | `tabn` | 次のタブに切り替える。 |
+| `prev` | `tabp` | 前のタブに切り替える。 |
+| `find <query>` | | 指定したクエリを検索する。 |
+| `replace <old> <new>` | | `<old>` を `<new>` に置換する。 |
+| `expw <width>` | `explorer_width` | ファイルエクスプローラーの幅を設定する。 |
+| `termh <height>` | `terminal_height` | 統合ターミナルの高さを設定する。 |
 | `diff` | | 現在のファイルのGit差分を新しいタブで表示。 |
 | `delcomm` | | 現在のバッファからすべてのコメントを削除。 |
 
