@@ -171,6 +171,7 @@ pip install caffee --upgrade
 | `termh <height>` | `terminal_height` | 統合ターミナルの高さを設定する。 |
 | `diff` | | 現在のファイルのGit差分を新しいタブで表示。 |
 | `delcomm` | | 現在のバッファからすべてのコメントを削除。 |
+| `template <lang>` | | 指定した言語のテンプレートを挿入する。 |
 
 ---
 
