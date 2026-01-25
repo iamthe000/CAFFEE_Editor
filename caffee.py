@@ -3298,8 +3298,17 @@ class Editor:
                     try:
                         subprocess.run(['xsel', '--clipboard', '--input'], input=text.encode('utf-8'), check=True, capture_output=True)
                     except (subprocess.CalledProcessError, FileNotFoundError):
-                        if hasattr(self, 'set_status'):
-                            self.set_status("Clipboard tool (wl-copy/xclip/xsel) not found.", timeout=3)
+                        # WSL support: try powershell.exe or clip.exe
+                        try:
+                            subprocess.run(['powershell.exe', '-NoProfile', '-Command', 
+                                            '[Console]::InputEncoding = [System.Text.Encoding]::UTF8; $input | Set-Clipboard'], 
+                                           input=text.encode('utf-8'), check=True, capture_output=True)
+                        except (subprocess.CalledProcessError, FileNotFoundError):
+                            try:
+                                subprocess.run(['clip.exe'], input=text.encode('utf-8'), check=True, capture_output=True)
+                            except (subprocess.CalledProcessError, FileNotFoundError):
+                                if hasattr(self, 'set_status'):
+                                    self.set_status("Clipboard tool (wl-copy/xclip/xsel/powershell/clip) not found.", timeout=3)
         except Exception as e:
             if hasattr(self, 'set_status'):
                 self.set_status(f"Clipboard Error: {e}", timeout=3)
@@ -3328,7 +3337,14 @@ class Editor:
                     try:
                         return subprocess.check_output(['xsel', '--clipboard', '--output'], text=True, stderr=subprocess.DEVNULL).replace('\r\n', '\n')
                     except (subprocess.CalledProcessError, FileNotFoundError):
-                        return None
+                        # WSL support: try powershell.exe
+                        try:
+                            out = subprocess.check_output(['powershell.exe', '-NoProfile', '-Command', 
+                                                          '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Clipboard -Raw'], 
+                                                         text=False, stderr=subprocess.DEVNULL)
+                            return out.decode('utf-8').replace('\r\n', '\n')
+                        except (subprocess.CalledProcessError, FileNotFoundError):
+                            return None
         except Exception:
             return None
 
