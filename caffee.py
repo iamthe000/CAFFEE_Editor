@@ -220,6 +220,33 @@ Hello.world()"""
     }
 }
 
+SETTING_ASSETS = {
+    "Default": {
+        "tab_width": 4,
+        "use_soft_tabs": True,
+        "vim_mode": False,
+        "explorer_icon_theme": "nerd_font",
+        "show_explorer_default": True,
+        "show_terminal_default": True
+    },
+    "Vim Style": {
+        "vim_mode": True,
+        "show_relative_linenum": True,
+        "tab_width": 4,
+        "use_soft_tabs": True,
+        "explorer_icon_theme": "nerd_font"
+    },
+    "VSCode Style": {
+        "vim_mode": False,
+        "tab_width": 2,
+        "use_soft_tabs": True,
+        "explorer_width": 30,
+        "explorer_icon_theme": "nerd_font",
+        "show_breadcrumb": True,
+        "auto_indent": True
+    }
+}
+
 # 色名とcurses定数のマッピング
 COLOR_MAP = {
     "BLACK": curses.COLOR_BLACK,
@@ -2496,6 +2523,89 @@ class Editor:
         except OSError as e:
             self.set_status(f"Error creating file: {e}", timeout=5)
 
+    def _select_setting_asset(self):
+        """設定アセットを選択して適用する"""
+        asset_names = sorted(SETTING_ASSETS.keys())
+        selected_index = 0
+        scroll_offset = 0
+
+        original_pane = self.active_pane
+        # 一時的にパネを切り替え（描画のため）
+        self.active_pane = 'asset_selector'
+
+        while True:
+            self.height, self.width = self.stdscr.getmaxyx()
+            self.stdscr.erase()
+            self.draw_tab_bar()
+            self.draw_ui()
+
+            max_items = self.height - 8
+            if selected_index < scroll_offset:
+                scroll_offset = selected_index
+            elif selected_index >= scroll_offset + max_items:
+                scroll_offset = selected_index - max_items + 1
+
+            title = "--- Select Setting Asset ---"
+            box_h = min(len(asset_names) + 4, max_items if max_items > 0 else 1)
+            box_w = max(max([len(n) for n in asset_names]) + 4, len(title) + 4)
+            box_y = max(0, self.height // 2 - box_h // 2)
+            box_x = max(0, self.width // 2 - box_w // 2)
+
+            try:
+                for i in range(box_h):
+                    self.stdscr.addstr(box_y + i, box_x, " " * box_w, curses.color_pair(1))
+                self.safe_addstr(box_y + 1, box_x + (box_w - len(title)) // 2, title, curses.color_pair(1))
+            except curses.error: pass
+
+            for i in range(min(len(asset_names), max_items if max_items > 0 else 0)):
+                idx = scroll_offset + i
+                if idx >= len(asset_names): break
+                
+                name = asset_names[idx]
+                y = box_y + 3 + i
+                x = box_x + 2
+                
+                attr = curses.A_REVERSE if idx == selected_index else curses.color_pair(1)
+                self.safe_addstr(y, x, name.ljust(box_w - 4), attr)
+
+            self.stdscr.refresh()
+
+            try:
+                ch = self.stdscr.getch()
+            except (curses.error, KeyboardInterrupt):
+                ch = -1
+
+            if ch == curses.KEY_UP:
+                selected_index = (selected_index - 1 + len(asset_names)) % len(asset_names)
+            elif ch == curses.KEY_DOWN:
+                selected_index = (selected_index + 1) % len(asset_names)
+            elif ch in (KEY_ENTER, KEY_RETURN):
+                selected_name = asset_names[selected_index]
+                self._apply_setting_asset(SETTING_ASSETS[selected_name], selected_name)
+                break
+            elif ch == KEY_ESC or ch == CTRL_C:
+                break
+
+        self.active_pane = original_pane
+
+    def _apply_setting_asset(self, asset_dict, asset_name):
+        """設定アセットを適用する"""
+        try:
+            # 現行の設定を更新
+            self.config.update(asset_dict)
+            
+            # ユーザーの設定ファイルに保存
+            setting_dir = get_config_dir()
+            setting_file = os.path.join(setting_dir, "setting.json")
+            os.makedirs(setting_dir, exist_ok=True)
+            
+            with open(setting_file, 'w', encoding='utf-8') as f:
+                json.dump(self.config, f, indent=4, ensure_ascii=False)
+            
+            self.set_status(f"Applied asset '{asset_name}' and saved to setting.json", timeout=5)
+        except Exception as e:
+            self.set_status(f"Error applying asset: {e}", timeout=5)
+
     def _select_and_insert_template(self):
         """テンプレート選択メニューを表示し、選択されたテンプレートを挿入する"""
         templates = self.config.get("templates", {})
@@ -2686,6 +2796,9 @@ class Editor:
                     self._create_default_settings_file()
                     # Stay on the start screen after the operation
                     continue
+                elif choice == 3: # Select setting assets
+                    self._select_setting_asset()
+                    continue
                 # if choice is -1, do nothing and stay on start screen
 
             elif ch == CTRL_P:
@@ -2701,7 +2814,7 @@ class Editor:
 
     def run_settings_menu(self):
         """設定メニューを表示し、ユーザーの選択を待つ"""
-        menu_items = ["[1] Open setting.json", "[2] Choice setting", "[3] Create default-json"]
+        menu_items = ["[1] Open setting.json", "[2] Choice setting", "[3] Create default-json", "[4] Select setting assets"]
         selected_index = 0
 
         while True:
@@ -2730,10 +2843,11 @@ class Editor:
                 selected_index = (selected_index - 1) % len(menu_items)
             elif ch == curses.KEY_DOWN:
                 selected_index = (selected_index + 1) % len(menu_items)
-            elif ch in (KEY_ENTER, KEY_RETURN, ord('1'), ord('2'), ord('3')):
+            elif ch in (KEY_ENTER, KEY_RETURN, ord('1'), ord('2'), ord('3'), ord('4')):
                 if ch == ord('1') : selected_index = 0
                 if ch == ord('2') : selected_index = 1
                 if ch == ord('3') : selected_index = 2
+                if ch == ord('4') : selected_index = 3
                 return selected_index
             elif ch == KEY_ESC:
                 return -1 # Cancel
