@@ -221,29 +221,49 @@ Hello.world()"""
 }
 
 SETTING_ASSETS = {
-    "Default": {
-        "tab_width": 4,
-        "use_soft_tabs": True,
-        "vim_mode": False,
-        "explorer_icon_theme": "nerd_font",
-        "show_explorer_default": True,
-        "show_terminal_default": True
+    "Color: Default (Coffee)": {
+        "colors": {
+            "header_text": "BLACK", "header_bg": "WHITE",
+            "linenum_text": "CYAN", "selection_bg": "CYAN"
+        }
     },
-    "Vim Style": {
+    "Color: Midnight Blue": {
+        "colors": {
+            "header_text": "WHITE", "header_bg": "BLUE",
+            "linenum_text": "BLUE", "selection_bg": "BLUE",
+            "keyword": "CYAN", "string": "YELLOW"
+        }
+    },
+    "Color: Emerald Forest": {
+        "colors": {
+            "header_text": "WHITE", "header_bg": "GREEN",
+            "linenum_text": "GREEN", "selection_bg": "GREEN",
+            "keyword": "YELLOW", "string": "CYAN"
+        }
+    },
+    "Color: Sakura Pink": {
+        "colors": {
+            "header_text": "BLACK", "header_bg": "MAGENTA",
+            "linenum_text": "MAGENTA", "selection_bg": "MAGENTA",
+            "keyword": "RED", "string": "WHITE"
+        }
+    },
+    "Color: High Contrast": {
+        "colors": {
+            "header_text": "BLACK", "header_bg": "WHITE",
+            "linenum_text": "WHITE", "linenum_bg": "BLACK",
+            "selection_text": "BLACK", "selection_bg": "WHITE",
+            "keyword": "WHITE", "string": "WHITE", "comment": "WHITE"
+        }
+    },
+    "Style: Vim-like": {
         "vim_mode": True,
-        "show_relative_linenum": True,
-        "tab_width": 4,
-        "use_soft_tabs": True,
-        "explorer_icon_theme": "nerd_font"
+        "show_relative_linenum": True
     },
-    "VSCode Style": {
-        "vim_mode": False,
+    "Style: VSCode-like": {
         "tab_width": 2,
-        "use_soft_tabs": True,
-        "explorer_width": 30,
-        "explorer_icon_theme": "nerd_font",
         "show_breadcrumb": True,
-        "auto_indent": True
+        "explorer_width": 30
     }
 }
 
