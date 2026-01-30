@@ -248,3 +248,7 @@ Contributions are welcome! Please fork the repository, make focused changes in a
 
 ## 📄 License
 This project is licensed under the GNU General Public License v3. See the [LICENSE](LICENSE) file for details.
+
+---
+
+*Made with ☕ and Python.*
