@@ -14,14 +14,14 @@
 [![PyPI Version](https://img.shields.io/pypi/v/caffee.svg)](https://pypi.org/project/caffee/)
 [![Python Version](https://img.shields.io/pypi/pyversions/caffee.svg)](https://pypi.org/project/caffee/)
 [![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Downloads](https://img.shields.io/pypi/dm/caffee.svg)](https://pypi.org/project/caffee/)
+  []([![Downloads](https://img.shields.io/pypi/dm/caffee.svg)](https://pypi.org/project/caffee/))
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/caffee?period=total&units=INTERNATIONAL_SYSTEM&left_color=GRAY&right_color=GREEN&left_text=TotalDownloads)](https://pepy.tech/projects/caffee)
 
 </div>
 
 <div align="center">
 
-<a href="ja-README.md">🇯🇵 日本語</a> | <a href="Nuitka_Step.md">Nuitka Compilation Guide</a> | <a href="Setup_PATH.md">PATH Setup Guide</a> | <a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">Official Japanese UI Plugin</a>
+<a href="ja-README.md">🇯🇵 日本語</a> | <a href="Nuitka_Step.md">Nuitka Compilation Guide</a> | <a href="Setup_PATH.md">PATH Setup Guide</a> | <a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">Official Japanese UI Plugin</a> | <a href="https://github.com/iamthe000/CAFFEETERIA">Light version(CAFFEETERIA)</a>
 
 </div>
 
