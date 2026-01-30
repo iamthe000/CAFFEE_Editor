@@ -57,7 +57,7 @@ except ImportError:
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "2.8.2"
+VERSION = "2.8.3"
 DEFAULT_CONFIG = {
     "tab_width": 4,
     "history_limit": 50,
@@ -759,11 +759,10 @@ class PluginManager:
             y = list_start_y + i
             
             marker = "[x]" if item["enabled"] else "[ ]"
-            display_str = f" {marker} {item['name']}"
+            prefix = "> " if idx == self.selected_index else "  "
+            display_str = f"{prefix}{marker} {item['name']}"
             
-            attr = curses.A_NORMAL
-            if idx == self.selected_index:
-                attr = curses.A_REVERSE
+            attr = colors["header"] | curses.A_REVERSE if idx == self.selected_index else colors["header"]
             
             try:
                 # 名前部分の色分け
@@ -849,11 +848,10 @@ class KeybindingSettingsManager:
             y = list_start_y + i
             
             marker = "[x]" if item["enabled"] else "[ ]"
-            display_str = f" {marker} {item['key']} {item['label']}"
+            prefix = "> " if idx == self.selected_index else "  "
+            display_str = f"{prefix}{marker} {item['key']} {item['label']}"
             
-            attr = curses.A_NORMAL
-            if idx == self.selected_index:
-                attr = curses.A_REVERSE
+            attr = colors["header"] | curses.A_REVERSE if idx == self.selected_index else colors["header"]
             
             try:
                 stdscr.addstr(y, 1, display_str.ljust(width-2), attr)
@@ -988,15 +986,16 @@ class SettingsManager:
             item = self.items[idx]
             y = list_start_y + i
 
-            attr = curses.A_REVERSE if idx == self.selected_index else curses.A_NORMAL
+            prefix = "> " if idx == self.selected_index else "  "
+            attr = colors["header"] | curses.A_REVERSE if idx == self.selected_index else colors["header"]
 
-            key_str = f" {item['key']}: "
+            key_str = f"{item['key']}: "
             val_str = str(item['value'])
 
             if idx == self.selected_index and self.edit_mode:
                 val_str = self.edit_buffer + "_"
 
-            display_str = f"{key_str}{val_str}".ljust(width)
+            display_str = f"{prefix}{key_str}{val_str}".ljust(width)
 
             try:
                 stdscr.addstr(y, 0, display_str, attr)
@@ -2567,7 +2566,7 @@ class Editor:
 
             title = "--- Select Setting Asset ---"
             box_h = min(len(asset_names) + 4, max_items if max_items > 0 else 1)
-            box_w = max(max([len(n) for n in asset_names]) + 4, len(title) + 4)
+            box_w = max(max([len(n) for n in asset_names]) + 6, len(title) + 4)
             box_y = max(0, self.height // 2 - box_h // 2)
             box_x = max(0, self.width // 2 - box_w // 2)
 
@@ -2585,8 +2584,9 @@ class Editor:
                 y = box_y + 3 + i
                 x = box_x + 2
                 
-                attr = curses.A_REVERSE if idx == selected_index else curses.color_pair(1)
-                self.safe_addstr(y, x, name.ljust(box_w - 4), attr)
+                prefix = "> " if idx == selected_index else "  "
+                attr = curses.color_pair(1) | curses.A_REVERSE if idx == selected_index else curses.color_pair(1)
+                self.safe_addstr(y, x, prefix + name.ljust(box_w - 6), attr)
 
             self.stdscr.refresh()
 
@@ -2658,7 +2658,7 @@ class Editor:
             
             # Center the box
             box_h = min(len(languages) + 4, max_items)
-            box_w = max(len(max(languages, key=len)) + 4, len(title) + 4)
+            box_w = max(len(max(languages, key=len)) + 6, len(title) + 4)
             box_y = self.height // 2 - box_h // 2
             box_x = self.width // 2 - box_w // 2
 
@@ -2678,8 +2678,9 @@ class Editor:
                 y = box_y + 3 + i
                 x = box_x + 2
                 
-                attr = curses.A_REVERSE if idx == selected_index else curses.color_pair(1)
-                self.safe_addstr(y, x, lang.ljust(box_w - 4), attr)
+                prefix = "> " if idx == selected_index else "  "
+                attr = curses.color_pair(1) | curses.A_REVERSE if idx == selected_index else curses.color_pair(1)
+                self.safe_addstr(y, x, prefix + lang.ljust(box_w - 6), attr)
 
             self.stdscr.refresh()
 
@@ -2848,9 +2849,10 @@ class Editor:
 
             for i, item in enumerate(menu_items):
                 y = title_y + 2 + i
-                x = self.width // 2 - len(item) // 2
-                attr = curses.A_REVERSE if i == selected_index else curses.A_NORMAL
-                self.safe_addstr(y, x, item, attr)
+                display_item = ("> " if i == selected_index else "  ") + item
+                x = self.width // 2 - len(display_item) // 2
+                attr = curses.color_pair(1) | curses.A_REVERSE if i == selected_index else curses.color_pair(1)
+                self.safe_addstr(y, x, display_item, attr)
 
             self.stdscr.refresh()
 
