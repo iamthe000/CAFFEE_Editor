@@ -173,6 +173,7 @@ Press `Ctrl+P` to enter Command Mode, then type a command and press Enter.
 | `delcomm` | | Remove all comments from the current buffer. |
 | `template <lang>` | | Insert a template for the specified language. |
 | `macro <file>` | | Execute a CAFFEINE macro file. |
+| `csv` | | Show a formatted table preview of the current CSV buffer. |
 
 ---
 
