@@ -16,6 +16,8 @@ import subprocess
 import time
 import urllib.request
 import platform
+import csv
+import io
 
 # --- 定数定義 (Key Codes) ---
 CTRL_A = 1
@@ -562,6 +564,14 @@ DEFAULT_SYNTAX_RULES = {
         "line_comment": "#",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
         "numbers": r"\b\d+\b"
+    },
+    "csv_preview": {
+        "extensions": [],
+        "language_name": "csv_preview",
+        "keywords": r"[┌┬┐├┼┤└┴┘│─]",
+        "comments": r"",
+        "strings": r"",
+        "numbers": r""
     }
 }
 
@@ -623,7 +633,9 @@ def strip_ansi(text):
 
 def get_char_width(char):
     """文字の表示幅を返す（半角=1, 全角=2）"""
-    return 2 if unicodedata.east_asian_width(char) in ('F', 'W', 'A') else 1
+    # 'A' (Ambiguous) characters like box drawings are often 1 in modern terminals.
+    # Treating them as 2 can cause broken frames with gaps.
+    return 2 if unicodedata.east_asian_width(char) in ('F', 'W') else 1
 
 def get_string_display_width(s):
     """文字列の合計表示幅を計算する"""
@@ -647,6 +659,102 @@ def truncate_to_width(s, max_width):
         current_width += char_w
         end_pos += 1
     return s[:end_pos] + "…"
+
+def format_csv_to_table(content):
+    """CSVテキストを表形式のテーブルに変換する"""
+    if not content.strip():
+        return ["(Empty)"]
+    
+    try:
+        # デリミタの自動判別を試みる。スペース誤爆を避けるため候補を絞る。
+        dialect = csv.Sniffer().sniff(content[:2048], delimiters=',\t;|')
+        f = io.StringIO(content)
+        reader = csv.reader(f, dialect)
+    except Exception:
+        # 失敗した場合は | が含まれていれば | を試す、そうでなければカンマ
+        if '|' in content:
+            f = io.StringIO(content)
+            reader = csv.reader(f, delimiter='|')
+        else:
+            f = io.StringIO(content)
+            reader = csv.reader(f)
+    
+    try:
+        rows = []
+        for row in reader:
+            # 各セルの前後空白を削除して整形
+            rows.append([cell.strip() for cell in row])
+        
+        # すべての行で最後の列が空なら削除する（パイプ区切りで最後に | がある場合などの対策）
+        if rows and len(rows[0]) > 1:
+            max_cols = max(len(row) for row in rows)
+            if max_cols > 1:
+                all_empty = True
+                for row in rows:
+                    if len(row) == max_cols and row[-1]:
+                        all_empty = False
+                        break
+                if all_empty:
+                    for i in range(len(rows)):
+                        if len(rows[i]) == max_cols:
+                            rows[i].pop()
+    except Exception as e:
+        return [f"Error parsing CSV: {e}"]
+        
+    if not rows:
+        return ["(No data)"]
+    
+    # 最大列数を計算
+    num_cols = max(len(row) for row in rows)
+    # 各列の最大表示幅を計算
+    col_widths = [0] * num_cols
+    is_numeric_col = [True] * num_cols
+    
+    for i, row in enumerate(rows):
+        for j in range(num_cols):
+            cell = row[j] if j < len(row) else ""
+            col_widths[j] = max(col_widths[j], get_string_display_width(cell))
+            # 数値列かどうかの判定 (ヘッダー以外でチェック)
+            if i > 0 and cell.strip():
+                try:
+                    float(cell.strip().replace(',', ''))
+                except ValueError:
+                    is_numeric_col[j] = False
+            elif i > 0 and not cell.strip():
+                # 空セルは無視するか、とりあえず保留
+                pass
+            
+    # 全くデータがない列や、ヘッダーしかない列の数値判定を調整
+    if len(rows) <= 1:
+        is_numeric_col = [False] * num_cols
+
+    # 罫線作成
+    top = "┌" + "┬".join("─" * (w + 2) for w in col_widths) + "┐"
+    sep = "├" + "┼".join("─" * (w + 2) for w in col_widths) + "┤"
+    bottom = "└" + "┴".join("─" * (w + 2) for w in col_widths) + "┘"
+    
+    table_lines = [top]
+    for i, row in enumerate(rows):
+        # 列数が足りない場合は補完
+        full_row = row + [""] * (num_cols - len(row))
+        
+        line = "│"
+        for j, cell in enumerate(full_row):
+            padding_size = col_widths[j] - get_string_display_width(cell)
+            if is_numeric_col[j] and i > 0:
+                # 数値列は右寄せ
+                line += " " + (" " * padding_size) + cell + " │"
+            else:
+                # それ以外（ヘッダー含む）は左寄せ
+                line += " " + cell + (" " * padding_size) + " │"
+        table_lines.append(line)
+        
+        # ヘッダーの下に区切り線を引く
+        if i == 0 and len(rows) > 1:
+            table_lines.append(sep)
+            
+    table_lines.append(bottom)
+    return table_lines
 
 class Buffer:
     """エディタのテキスト内容を保持するクラス"""
@@ -1696,6 +1804,7 @@ class Editor:
             'terminal_height': self._command_terminal_height,
             'template': self._command_template,
             'macro': self._command_macro,
+            'csv': self._command_csv,
         }
 
         self.init_colors()
@@ -2380,6 +2489,29 @@ class Editor:
 
         self.tabs.append(new_tab)
         self.active_tab_idx = len(self.tabs) - 1
+
+    def _command_csv(self, *args):
+        """'csv' command: Show a table preview of the current CSV buffer."""
+        content = "\n".join(self.buffer.lines)
+        table_lines = format_csv_to_table(content)
+        
+        csv_tab_name = f"csv://{os.path.basename(self.filename) if self.filename else 'untitled'}"
+        
+        # すでにプレビュータブが開いているか確認
+        for i, tab in enumerate(self.tabs):
+            if tab.filename == csv_tab_name:
+                self.active_tab_idx = i
+                tab.buffer = Buffer(table_lines)
+                self.set_status("CSV preview updated.", timeout=2)
+                return
+
+        # 新しいタブを作成
+        new_tab = EditorTab(Buffer(table_lines), csv_tab_name, self.syntax_rules.get("csv_preview"), None)
+        new_tab.read_only = True
+        
+        self.tabs.append(new_tab)
+        self.active_tab_idx = len(self.tabs) - 1
+        self.set_status("CSV preview opened.", timeout=2)
 
     def _get_git_file_status(self, filepath):
         """Get the git status for a specific file."""
@@ -3145,6 +3277,7 @@ class Editor:
         ATTR_DIFF_REMOVE = curses.color_pair(17)
 
         is_diff_view = self.current_syntax_rules and self.current_syntax_rules.get("language_name") == "diff"
+        is_csv_preview = self.current_syntax_rules and self.current_syntax_rules.get("language_name") == "csv_preview"
 
         for i in range(edit_h):
             file_line_idx = self.scroll_offset + i
@@ -3190,7 +3323,11 @@ class Editor:
                         for j in range(len(line_attrs)): line_attrs[j] = ATTR_DIFF_ADD
                     elif line.startswith('-'):
                         for j in range(len(line_attrs)): line_attrs[j] = ATTR_DIFF_REMOVE
-                elif self.current_syntax_rules:
+                elif is_csv_preview:
+                    if file_line_idx == 1: # Header row
+                        for j in range(len(line_attrs)): line_attrs[j] = ATTR_STRING
+                
+                if self.current_syntax_rules:
                     if "keywords" in self.current_syntax_rules:
                         for match in re.finditer(self.current_syntax_rules["keywords"], line):
                             for j in range(match.start(), match.end()):
@@ -3872,6 +4009,14 @@ class Editor:
             self._update_tab_git_status(self.current_tab)
             self.save_history(init=True)
             self.set_status(f"Saved {len(self.buffer)} lines to {self.filename}.", timeout=3)
+
+            # CSVプレビューが開いている場合は更新
+            if self.filename:
+                csv_tab_name = f"csv://{os.path.basename(self.filename)}"
+                for tab in self.tabs:
+                    if tab.filename == csv_tab_name:
+                        content = "\n".join(self.buffer.lines)
+                        tab.buffer = Buffer(format_csv_to_table(content))
         except (IOError, OSError) as e:
             self.set_status(f"Error saving file: {e}", timeout=5)
 
