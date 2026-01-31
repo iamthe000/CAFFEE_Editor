@@ -60,6 +60,7 @@
 - **Git Integration** - View branch names, file status markers (`~`: modified, `+`: new), and unified diffs (`Ctrl+D`).
 - **Enhanced File Explorer** (`Ctrl+F`) - Browse and manage files with sorting, wildcard search, and full-screen mode.
 - **Integrated Terminal** (`Ctrl+N`) - Execute shell commands directly from the editor.
+- **CAFFEINE Macro Language** - Automate editor tasks with a dedicated, simple macro language.
 - **Command Mode** (`Ctrl+P`) - Execute powerful commands like `:open`, `:saveas`, `:set`, and `:delcomm`.
 
 ### ⚙️ **Extensibility & Advanced Support**
@@ -171,6 +172,7 @@ Press `Ctrl+P` to enter Command Mode, then type a command and press Enter.
 | `diff` | | Show a Git diff of the current file in a new tab. |
 | `delcomm` | | Remove all comments from the current buffer. |
 | `template <lang>` | | Insert a template for the specified language. |
+| `macro <file>` | | Execute a CAFFEINE macro file. |
 
 ---
 
@@ -217,6 +219,27 @@ User settings are stored in `~/.caffee_setting/setting.json`. You can edit this 
 - **`explorer_show_details`**: Show file size and modification date in the explorer.
 - **`displayed_keybindings`**: Customize which keybindings appear in the footer bar.
 - **`colors`**: Comprehensive color customization for all UI elements.
+
+---
+
+## ☕ CAFFEINE Macro Language
+CAFFEINE is a simple macro language designed specifically for CAFFEE. Macros allow you to automate repetitive tasks by defining a sequence of editor actions.
+
+### Macro Syntax
+Macros are stored in `.caffeine` files. Each line can be a command, a cursor movement, or text insertion.
+
+| Command | Description |
+|---------|-------------|
+| `# comment` | Lines starting with `#` are ignored. |
+| `:command` | Execute any CAFFEE editor command. |
+| `MOVE <y> <x>` | Move the cursor to the specified row and column. |
+| `INSERT "text"` | Insert the specified text at the cursor position. |
+| `TYPE "text"` | Simulate typing text character by character. |
+| `WAIT <ms>` | Pause execution for the specified number of milliseconds. |
+| `COMMAND "cmd"` | Alias for executing an editor command. |
+
+### Usage
+To run a macro, use the `:macro <filename>` command in Command Mode (`Ctrl+P`). CAFFEE will look for the file in the current directory or in `~/.caffee_setting/macros/`.
 
 ---
 
