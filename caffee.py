@@ -59,7 +59,7 @@ except ImportError:
 
 # --- デフォルト設定 ---
 EDITOR_NAME = "CAFFEE"
-VERSION = "2.9.0"
+VERSION = "2.9.1"
 DEFAULT_CONFIG = {
     "tab_width": 4,
     "history_limit": 50,
