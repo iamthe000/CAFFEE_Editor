@@ -554,6 +554,14 @@ DEFAULT_SYNTAX_RULES = {
         "line_comment": "#",
         "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
         "numbers": r"\b\d+\b"
+    },
+    "caffeine": {
+        "extensions": [".caffeine"],
+        "keywords": r"\b(MOVE|INSERT|WAIT|COMMAND|TYPE)\b",
+        "comments": r"#.*",
+        "line_comment": "#",
+        "strings": r"(['\"])(?:(?<!\\)\1|.)*?\1",
+        "numbers": r"\b\d+\b"
     }
 }
 
@@ -659,6 +667,105 @@ class Buffer:
     
     def clone(self):
         return Buffer([line for line in self.lines])
+
+class MacroManager:
+    """CAFFEINE マクロ言語の実行を管理するクラス"""
+    def __init__(self, editor):
+        self.editor = editor
+
+    def run_file(self, filename):
+        """指定された .caffeine ファイルを読み込んで実行する"""
+        if not filename:
+            self.editor.set_status("Usage: macro <filename>", timeout=3)
+            return
+
+        # Try adding extension if not present
+        if not os.path.exists(filename) and not filename.endswith(".caffeine"):
+            if os.path.exists(filename + ".caffeine"):
+                filename += ".caffeine"
+
+        if not os.path.exists(filename):
+            # Try ~/.caffee_setting/macros/ if not found
+            macro_dir = os.path.join(get_config_dir(), "macros")
+            alt_path = os.path.join(macro_dir, filename)
+            if not alt_path.endswith(".caffeine"):
+                alt_path += ".caffeine"
+            
+            if os.path.exists(alt_path):
+                filename = alt_path
+            else:
+                self.editor.set_status(f"Macro file not found: {filename}", timeout=4)
+                return
+
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            self.editor.set_status(f"Running macro: {os.path.basename(filename)}...")
+            self.editor.draw_ui()
+            self.editor.stdscr.refresh()
+
+            for line in lines:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                
+                # 行の先頭が : ならエディタコマンドとして実行
+                if line.startswith(':'):
+                    self.editor.execute_command(line[1:])
+                    continue
+
+                parts = line.split(maxsplit=1)
+                cmd = parts[0].upper()
+                args = parts[1] if len(parts) > 1 else ""
+                
+                if cmd == 'MOVE':
+                    try:
+                        coords = args.split()
+                        y = int(coords[0])
+                        x = int(coords[1])
+                        self.editor.move_cursor_to(y, x)
+                    except (ValueError, IndexError):
+                        pass
+                elif cmd == 'INSERT':
+                    text = args
+                    if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
+                        text = text[1:-1]
+                    # Escape sequences handling
+                    text = text.encode('utf-8').decode('unicode_escape')
+                    self.editor.insert_text(text)
+                elif cmd == 'WAIT':
+                    try:
+                        ms = int(args)
+                        curses.napms(ms)
+                        # 待機中に画面を更新して進捗を見せる
+                        self.editor.draw_ui()
+                        self.editor.draw_content()
+                        self.editor.stdscr.refresh()
+                    except ValueError:
+                        pass
+                elif cmd == 'COMMAND':
+                    cmd_to_exec = args
+                    if (cmd_to_exec.startswith('"') and cmd_to_exec.endswith('"')) or (cmd_to_exec.startswith("'") and cmd_to_exec.endswith("'")):
+                        cmd_to_exec = cmd_to_exec[1:-1]
+                    self.editor.execute_command(cmd_to_exec)
+                elif cmd == 'TYPE':
+                    # 1文字ずつタイプする（演出用）
+                    text = args
+                    if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
+                        text = text[1:-1]
+                    text = text.encode('utf-8').decode('unicode_escape')
+                    for char in text:
+                        self.editor.insert_text(char)
+                        self.editor.draw_ui()
+                        self.editor.draw_content()
+                        self.editor.stdscr.refresh()
+                        curses.napms(50)
+                
+            self.editor.set_status(f"Macro finished: {os.path.basename(filename)}", timeout=3)
+        except Exception as e:
+            self.editor.set_status(f"Macro Error: {e}", timeout=5)
+
 
 class PluginManager:
     """プラグインの有効・無効を管理するクラス"""
@@ -1528,6 +1635,7 @@ class Editor:
         self.explorer = FileExplorer(self, ".")
         self.terminal = Terminal(self.terminal_height)
         self.plugin_manager = PluginManager(get_config_dir())
+        self.macro_manager = MacroManager(self)
         self.settings_manager = SettingsManager(self.config)
         self.keybinding_settings_manager = KeybindingSettingsManager(self)
         
@@ -1587,6 +1695,7 @@ class Editor:
             'explorer_width': self._command_explorer_width,
             'terminal_height': self._command_terminal_height,
             'template': self._command_template,
+            'macro': self._command_macro,
         }
 
         self.init_colors()
@@ -4089,6 +4198,13 @@ class Editor:
                 self.set_status(f"'{lang}' テンプレートが見つかりません。", timeout=3)
         else:
             self._select_and_insert_template()
+
+    def _command_macro(self, filename=None, *args):
+        """'macro'コマンド: .caffeine マクロファイルを実行する"""
+        if not filename:
+            self.set_status("Usage: macro <filename>", timeout=3)
+            return
+        self.macro_manager.run_file(filename)
 
     def _command_set(self, key=None, value=None):
         """'set'コマンド: 設定値を変更"""
