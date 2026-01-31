@@ -174,6 +174,7 @@ pip install caffee --upgrade
 | `delcomm` | | 現在のバッファからすべてのコメントを削除。 |
 | `template <lang>` | | 指定した言語のテンプレートを挿入する。 |
 | `macro <file>` | | CAFFEINE マクロファイルを実行する。 |
+| `csv` | | 現在のCSVバッファを整形されたテーブル形式でプレビュー表示する。 |
 
 ---
 
