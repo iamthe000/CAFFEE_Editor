@@ -1,0 +1,24 @@
+# CAFFEINE Sample Macro
+# This macro demonstrates some basic commands
+
+# Move to the start of the buffer
+MOVE 0 0
+
+# Insert a header
+INSERT "--- CAFFEINE MACRO START ---"
+:undo
+# Wait, undo was just for demo. Let's type it back with style.
+TYPE "\nWelcome to CAFFEINE Macro!\n"
+
+# Move and insert more text
+MOVE 2 0
+INSERT "Automating tasks is easy.\n"
+
+# Execute an editor command
+:set tab_width 2
+
+# Wait for a moment to show progress
+WAIT 500
+
+INSERT "Macro finished.\n"
+INSERT "--- CAFFEINE MACRO END ---\n"
