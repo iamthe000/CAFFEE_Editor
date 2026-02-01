@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://github.com/iamthe000/CAFFEE_Editor/sitemap.xml
