@@ -780,6 +780,34 @@ class MacroManager:
     """CAFFEINE マクロ言語の実行を管理するクラス"""
     def __init__(self, editor):
         self.editor = editor
+        self.variables = {}
+
+    def _eval_expression(self, expr):
+        """式を評価して値を返す。変数展開も行う。"""
+        # 変数をその値で置換（長い名前から順に置換して部分一致を避ける）
+        processed_expr = expr
+        for var in sorted(self.variables.keys(), key=len, reverse=True):
+            # 単語境界を考慮して置換
+            processed_expr = re.sub(r'\b' + re.escape(var) + r'\b', str(self.variables[var]), processed_expr)
+        
+        try:
+            # 許可される文字のみが含まれているか確認（セキュリティのため）
+            if re.match(r'^[0-9\s\+\-\*\/\(\)\%\>\<\=\!\&\|\.]+$', processed_expr):
+                return eval(processed_expr)
+        except Exception:
+            pass
+        return processed_expr
+
+    def _substitute_vars(self, text):
+        """文字列内の {var} を変数の値で置換する"""
+        try:
+            return text.format(**self.variables)
+        except (KeyError, ValueError, IndexError):
+            # formatが失敗した場合は、手動で置換を試みる
+            result = text
+            for var, val in self.variables.items():
+                result = result.replace(f"{{{var}}}", str(val))
+            return result
 
     def run_file(self, filename):
         """指定された .caffeine ファイルを読み込んで実行する"""
@@ -807,59 +835,149 @@ class MacroManager:
 
         try:
             with open(filename, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
+                raw_lines = f.readlines()
             
             self.editor.set_status(f"Running macro: {os.path.basename(filename)}...")
             self.editor.draw_ui()
             self.editor.stdscr.refresh()
 
-            for line in lines:
-                line = line.strip()
+            self.variables = {}
+            lines = [line.strip() for line in raw_lines]
+            
+            # ジャンプテーブルの作成（IF/ELSE/ENDIF, LOOP/ENDLOOP）
+            jump_table = {}
+            stack = []
+            for i, line in enumerate(lines):
                 if not line or line.startswith('#'):
+                    continue
+                parts = line.split()
+                cmd = parts[0].upper()
+                if cmd in ('IF', 'LOOP'):
+                    stack.append(i)
+                elif cmd == 'ELSE':
+                    if stack:
+                        top_cmd = lines[stack[-1]].split()[0].upper()
+                        if top_cmd == 'IF':
+                            start_if = stack.pop()
+                            jump_table[start_if] = i
+                            stack.append(i)
+                elif cmd == 'ENDIF':
+                    if stack:
+                        start = stack.pop()
+                        jump_table[start] = i
+                elif cmd == 'ENDLOOP':
+                    if stack:
+                        start = stack.pop()
+                        jump_table[start] = i
+                        jump_table[i] = start
+
+            pc = 0
+            loop_counters = {} # pc -> current_count
+
+            while pc < len(lines):
+                line = lines[pc]
+                if not line or line.startswith('#'):
+                    pc += 1
                     continue
                 
                 # 行の先頭が : ならエディタコマンドとして実行
                 if line.startswith(':'):
-                    self.editor.execute_command(line[1:])
+                    self.editor.execute_command(self._substitute_vars(line[1:]))
+                    pc += 1
                     continue
 
                 parts = line.split(maxsplit=1)
                 cmd = parts[0].upper()
                 args = parts[1] if len(parts) > 1 else ""
                 
-                if cmd == 'MOVE':
+                if cmd == 'SET':
+                    var_parts = args.split(maxsplit=1)
+                    if len(var_parts) == 2:
+                        var_name, expr = var_parts
+                        self.variables[var_name] = self._eval_expression(expr)
+                    pc += 1
+                elif cmd == 'IF':
+                    condition = self._eval_expression(args)
+                    if not condition:
+                        if pc in jump_table:
+                            target = jump_table[pc]
+                            # If we jump to ELSE, we want to start executing after it.
+                            if lines[target].split()[0].upper() == 'ELSE':
+                                pc = target + 1
+                            else:
+                                pc = target
+                        else:
+                            pc += 1
+                    else:
+                        pc += 1
+                elif cmd == 'ELSE':
+                    if pc in jump_table:
+                        pc = jump_table[pc]
+                    else:
+                        pc += 1
+                elif cmd == 'ENDIF':
+                    pc += 1
+                elif cmd == 'LOOP':
+                    if pc not in loop_counters:
+                        try:
+                            count = int(self._eval_expression(args))
+                            loop_counters[pc] = count
+                        except (ValueError, TypeError):
+                            loop_counters[pc] = 0
+                    
+                    if loop_counters[pc] > 0:
+                        pc += 1
+                    else:
+                        del loop_counters[pc]
+                        if pc in jump_table:
+                            pc = jump_table[pc] + 1
+                        else:
+                            pc += 1
+                elif cmd == 'ENDLOOP':
+                    start_pc = jump_table.get(pc)
+                    if start_pc is not None:
+                        loop_counters[start_pc] -= 1
+                        pc = start_pc
+                    else:
+                        pc += 1
+                elif cmd == 'MOVE':
                     try:
-                        coords = args.split()
-                        y = int(coords[0])
-                        x = int(coords[1])
+                        processed_args = self._substitute_vars(args)
+                        coords = processed_args.split()
+                        y = int(self._eval_expression(coords[0]))
+                        x = int(self._eval_expression(coords[1]))
                         self.editor.move_cursor_to(y, x)
                     except (ValueError, IndexError):
                         pass
+                    pc += 1
                 elif cmd == 'INSERT':
-                    text = args
+                    text = self._substitute_vars(args)
                     if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
                         text = text[1:-1]
                     # Escape sequences handling
                     text = text.encode('utf-8').decode('unicode_escape')
                     self.editor.insert_text(text)
+                    pc += 1
                 elif cmd == 'WAIT':
                     try:
-                        ms = int(args)
+                        ms = int(self._eval_expression(args))
                         curses.napms(ms)
                         # 待機中に画面を更新して進捗を見せる
                         self.editor.draw_ui()
                         self.editor.draw_content()
                         self.editor.stdscr.refresh()
-                    except ValueError:
+                    except (ValueError, TypeError):
                         pass
+                    pc += 1
                 elif cmd == 'COMMAND':
-                    cmd_to_exec = args
+                    cmd_to_exec = self._substitute_vars(args)
                     if (cmd_to_exec.startswith('"') and cmd_to_exec.endswith('"')) or (cmd_to_exec.startswith("'") and cmd_to_exec.endswith("'")):
                         cmd_to_exec = cmd_to_exec[1:-1]
                     self.editor.execute_command(cmd_to_exec)
+                    pc += 1
                 elif cmd == 'TYPE':
                     # 1文字ずつタイプする（演出用）
-                    text = args
+                    text = self._substitute_vars(args)
                     if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
                         text = text[1:-1]
                     text = text.encode('utf-8').decode('unicode_escape')
@@ -869,6 +987,9 @@ class MacroManager:
                         self.editor.draw_content()
                         self.editor.stdscr.refresh()
                         curses.napms(50)
+                    pc += 1
+                else:
+                    pc += 1
                 
             self.editor.set_status(f"Macro finished: {os.path.basename(filename)}", timeout=3)
         except Exception as e:
