@@ -238,6 +238,32 @@ Macros are stored in `.caffeine` files. Each line can be a command, a cursor mov
 | `TYPE "text"` | Simulate typing text character by character. |
 | `WAIT <ms>` | Pause execution for the specified number of milliseconds. |
 | `COMMAND "cmd"` | Alias for executing an editor command. |
+| `SET <var> <expr>` | Set a variable to the result of an expression. |
+| `IF <expr>` | Conditional block. Starts with `IF`, ends with `ENDIF`. |
+| `ELSE` | Optional block within an `IF` statement. |
+| `LOOP <count>` | Repeat a block of commands for the specified number of times. |
+| `ENDLOOP` | End of a `LOOP` block. |
+
+### Variable Substitution
+You can use variables in your macro commands using the `{var_name}` syntax. For example, `INSERT "Iteration {i}"` will insert the current value of variable `i`. Variables are also automatically substituted in editor commands (lines starting with `:`).
+
+### Advanced Macro Example
+```caffeine
+# Simple loop with variables and arithmetic
+SET i 1
+LOOP 5
+  INSERT "Line {i}\n"
+  SET i i + 1
+ENDLOOP
+
+# Conditional logic
+SET x 10
+IF x > 5
+  INSERT "x is greater than 5\n"
+ELSE
+  INSERT "x is 5 or less\n"
+ENDIF
+```
 
 ### Usage
 To run a macro, use the `:macro <filename>` command in Command Mode (`Ctrl+P`). CAFFEE will look for the file in the current directory or in `~/.caffee_setting/macros/`.
