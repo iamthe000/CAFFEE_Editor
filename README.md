@@ -21,7 +21,13 @@
 
 <div align="center">
 
-<a href="ja-README.md">🇯🇵 日本語</a> | <a href="Nuitka_Step.md">Nuitka Compilation Guide</a> | <a href="Setup_PATH.md">PATH Setup Guide</a> | <a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">Official Japanese UI Plugin</a> | <a href="https://github.com/iamthe000/CAFFEETERIA">Light version(CAFFEETERIA)</a>
+<a href="ja-README.md">🇯🇵 日本語</a> | <a href="TECHNICAL_ja.md">Technical Specs (JP)</a> | <a href="PLUGINS_ja.md">Plugin Dev (JP)</a> | <a href="Nuitka_Step.md">Nuitka Guide</a> | <a href="Setup_PATH.md">PATH Setup</a>
+
+</div>
+
+<div align="center">
+
+<a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">Official Japanese UI Plugin</a> | <a href="https://github.com/iamthe000/CAFFEETERIA">Light version(CAFFEETERIA)</a>
 
 </div>
 
@@ -36,6 +42,7 @@
 - [🚀 Command Mode](#-command-mode)
 - [⚙️ Configuration](#️-configuration)
 - [🧩 Plugin System](#-plugin-system)
+- [📜 Technical Documentation](#-technical-documentation)
 - [🛠️ Troubleshooting](#️-troubleshooting)
 - [🤝 Contributing](#-contributing)
 - [📄 License](#-license)
@@ -267,6 +274,16 @@ ENDIF
 
 ### Usage
 To run a macro, use the `:macro <filename>` command in Command Mode (`Ctrl+P`). CAFFEE will look for the file in the current directory or in `~/.caffee_setting/macros/`.
+
+---
+
+## 📜 Technical Documentation
+
+For more in-depth technical information and extension guides, please refer to the following documents (currently in Japanese):
+
+- [**Technical Specifications (TECHNICAL_ja.md)**](TECHNICAL_ja.md) - Details on architecture, rendering pipeline, and macro engine.
+- [**Plugin Development Guide (PLUGINS_ja.md)**](PLUGINS_ja.md) - Instructions for creating plugins and API reference.
+- [**Nuitka Compilation Guide**](Nuitka_Step.md) - Procedures for standalone binary creation and startup acceleration.
 
 ---
 
