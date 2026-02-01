@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CAFFEE - Modern Terminal Text Editor</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body class="lang-en">
+    <nav>
+        <div class="container">
+            <div class="logo">☕ CAFFEE</div>
+            <div class="nav-links">
+                <a href="#features" class="en">Features</a>
+                <a href="#features" class="ja">機能</a>
+                <a href="#install" class="en">Install</a>
+                <a href="#install" class="ja">インストール</a>
+                <button id="toggle-lang">日本語</button>
+            </div>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="container">
+            <h1 class="en">Modern Terminal Text Editor</h1>
+            <h1 class="ja">モダンなターミナルテキストエディタ</h1>
+            <p class="en subtitle">A lightweight, modern, and extensible text editor that runs in your terminal.</p>
+            <p class="ja subtitle">ターミナルで動作する、軽量でモダン、そして拡張可能なテキストエディタ。</p>
+            
+            <div class="badges">
+                <img src="https://img.shields.io/pypi/v/caffee.svg" alt="PyPI Version">
+                <img src="https://img.shields.io/pypi/pyversions/caffee.svg" alt="Python Version">
+                <img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License">
+            </div>
+
+            <div class="hero-image">
+                <img src="preview.png" alt="CAFFEE Preview">
+            </div>
+
+            <div class="cta">
+                <code>pip install caffee</code>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section id="features">
+            <h2 class="en">Why CAFFEE?</h2>
+            <h2 class="ja">CAFFEEを選ぶ理由</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <h3 class="en">🎨 Modern UI</h3>
+                    <h3 class="ja">🎨 モダンなUI</h3>
+                    <p class="en">Multi-tab editing, breadcrumb bars, and Nerd Font icons for a clean, productive experience.</p>
+                    <p class="ja">マルチタブ編集、ブレッドクラムバー、Nerd Fontアイコンによる洗練された操作体験。</p>
+                </div>
+                <div class="feature-card">
+                    <h3 class="en">🚀 Productivity</h3>
+                    <h3 class="ja">🚀 高い生産性</h3>
+                    <p class="en">Interactive search/replace, smart auto-indent, and system clipboard synchronization.</p>
+                    <p class="ja">対話的な検索・置換、スマートな自動インデント、システムクリップボードとの同期。</p>
+                </div>
+                <div class="feature-card">
+                    <h3 class="en">⚙️ Extensible</h3>
+                    <h3 class="ja">⚙️ 拡張性</h3>
+                    <p class="en">Powerful plugin system in Python and the CAFFEINE macro language for automation.</p>
+                    <p class="ja">Pythonによる強力なプラグインシステムと、自動化のためのCAFFEINEマクロ言語。</p>
+                </div>
+                <div class="feature-card">
+                    <h3 class="en">⌨️ Vim Mode</h3>
+                    <h3 class="ja">⌨️ Vimモード</h3>
+                    <p class="en">Optional modal editing support for high-efficiency navigation.</p>
+                    <p class="ja">オプションでモーダル編集をサポートし、高速なナビゲーションを可能にします。</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="install">
+            <h2 class="en">Get Started</h2>
+            <h2 class="ja">はじめに</h2>
+            <div class="install-steps">
+                <p class="en">Install CAFFEE easily via PyPI:</p>
+                <p class="ja">PyPIから簡単にインストールできます:</p>
+                <pre><code>pip install caffee</code></pre>
+                <p class="en">Then, just run it:</p>
+                <p class="ja">インストール後、実行するだけです:</p>
+                <pre><code>caffee</code></pre>
+            </div>
+        </section>
+
+        <section id="docs-links">
+            <h2 class="en">Documentation</h2>
+            <h2 class="ja">ドキュメント</h2>
+            <ul class="docs-list">
+                <li><a href="https://github.com/iamthe000/CAFFEE/blob/main/TECHNICAL_ja.md" target="_blank">Technical Specs (JP)</a></li>
+                <li><a href="https://github.com/iamthe000/CAFFEE/blob/main/PLUGINS_ja.md" target="_blank">Plugin Development Guide (JP)</a></li>
+                <li><a href="https://github.com/iamthe000/CAFFEE/blob/main/Nuitka_Step.md" target="_blank">Nuitka Acceleration Guide</a></li>
+            </ul>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 CAFFEE Project. Made with ☕ and Python.</p>
+            <p><a href="https://github.com/iamthe000/CAFFEE">GitHub Repository</a></p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
