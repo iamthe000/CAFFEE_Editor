@@ -22,7 +22,13 @@
 
 <div align="center">
 
-<a href="README.md">🇬🇧 English</a> | <a href="Nuitka_Step.md">Nuitkaによる高速化手順</a> | <a href="Setup_PATH.md">PATHのセットアップ方法</a> | <a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">公式UI日本語化プラグイン</a> | <a href="https://github.com/iamthe000/CAFFEETERIA">軽量版(CAFFEETERIA)</a>
+<a href="README.md">🇬🇧 English</a> | <a href="TECHNICAL_ja.md">技術仕様書</a> | <a href="PLUGINS_ja.md">プラグイン開発</a> | <a href="Nuitka_Step.md">Nuitkaによる高速化手順</a> | <a href="Setup_PATH.md">PATHのセットアップ方法</a>
+
+</div>
+
+<div align="center">
+
+<a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">公式UI日本語化プラグイン</a> | <a href="https://github.com/iamthe000/CAFFEETERIA">軽量版(CAFFEETERIA)</a>
 
 </div>
 
@@ -37,6 +43,7 @@
 - [🚀 コマンドモード](#-コマンドモード)
 - [⚙️ 設定](#️-設定)
 - [🧩 プラグインシステム](#-プラグインシステム)
+- [📜 技術ドキュメント](#-技術ドキュメント)
 - [🛠️ トラブルシューティング](#️-トラブルシューティング)
 - [🤝 コントリビューション](#-コントリビューション)
 - [📄 ライセンス](#-ライセンス)
@@ -267,6 +274,16 @@ ENDIF
 
 ### 使い方
 マクロを実行するには、コマンドモード (`Ctrl+P`) で `:macro <filename>` コマンドを使用します。CAFFEE はカレントディレクトリ、または `~/.caffee_setting/macros/` 内のファイルを探します。
+
+---
+
+## 📜 技術ドキュメント
+
+より詳細な技術情報や拡張方法については、以下のドキュメントを参照してください。
+
+- [**技術仕様書 (TECHNICAL_ja.md)**](TECHNICAL_ja.md) - アーキテクチャ、レンダリングパイプライン、マクロエンジンの詳細。
+- [**プラグイン開発ガイド (PLUGINS_ja.md)**](PLUGINS_ja.md) - プラグインの作成方法とAPIリファレンス。
+- [**Nuitkaによる高速化手順**](Nuitka_Step.md) - スタンドアロンバイナリ化と起動高速化の手順。
 
 ---
 
