@@ -11,7 +11,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     # Only publish to PyPI if the release is NOT marked as a pre-release
-    if: github.event.release.prerelease == false
+    if: ${{ !github.event.release.prerelease }}
     permissions:
       # Grant OIDC token permissions for trusted publishing
       id-token: write
