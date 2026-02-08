@@ -289,7 +289,7 @@ DEFAULT_KEYBINDINGS = {
     "next_tab": {"key": "^L", "label": "NextTab"},
     "save": {"key": "^O", "label": "Save"},
     "cut": {"key": "^K", "label": "Cut"},
-    "paste": {"key": "^U", "label": "Paste"},
+    "paste": {"key": "^V", "label": "Paste"},
     "search": {"key": "^W", "label": "Search"},
     "undo": {"key": "^Z", "label": "Undo"},
     "redo": {"key": "^R", "label": "Redo"},
@@ -306,7 +306,7 @@ DEFAULT_KEYBINDINGS = {
     "command": {"key": "^P", "label": "Command"},
     "diff": {"key": "^D", "label": "Diff"},
     "template": {"key": "^T", "label": "Template"},
-    "relative_linenum": {"key": "^V", "label": "RelNum"},
+    "relative_linenum": {"key": "^U", "label": "RelNum"},
 }
 
 # --- File Icons for Explorer ---
