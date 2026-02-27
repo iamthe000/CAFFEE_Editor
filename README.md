@@ -309,8 +309,20 @@ Plugins can access the editor's state and functions via an `init(editor)` entry 
 
 ---
 
-## 🤝 Contributing
-Contributions are welcome! Please fork the repository, make focused changes in a feature branch, and submit a pull request.
+## 🤝 Contributing / Branching Strategy
+Contributions are always welcome! To ensure the stability of the editor and prevent accidental deployments to PyPI, this project uses a standard branching model. 
+
+Please do **not** push directly to the `main` branch.
+
+* **`main`**: The stable, release-ready branch. (Tags created here trigger automatic PyPI deployment).
+* **`develop`**: The main development and integration branch. All new features and bug fixes should be merged here first for testing.
+
+**How to contribute:**
+1. Fork the repository.
+2. Create a new feature branch branching off from **`develop`** (e.g., `feature/add-new-theme` or `fix/typo`).
+3. Make your changes and commit them.
+4. Push your branch to your forked repository.
+5. Submit a Pull Request (PR) targeting the **`develop`** branch of this original repository.
 
 ---
 
