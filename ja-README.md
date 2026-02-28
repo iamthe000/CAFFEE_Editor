@@ -23,13 +23,7 @@
 
 <div align="center">
 
-<a href="README.md">🇬🇧 English</a> | <a href="TECHNICAL_ja.md">技術仕様書</a> | <a href="PLUGINS_ja.md">プラグイン開発</a> | <a href="Nuitka_Step.md">Nuitkaによる高速化手順</a> | <a href="Setup_PATH.md">PATHのセットアップ方法</a>
-
-</div>
-
-<div align="center">
-
-<a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">公式UI日本語化プラグイン</a> | <a href="https://github.com/iamthe000/CAFFEETERIA">軽量版(CAFFEETERIA)</a>
+<a href="README.md">🇬🇧 English</a> | <a href="TECHNICAL_ja.md">技術仕様書</a> | <a href="PLUGINS_ja.md">プラグイン開発</a> | <a href="Nuitka_Step.md">Nuitkaによる高速化手順</a> | <a href="Setup_PATH.md">PATHのセットアップ方法</a> | <a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">公式UI日本語化プラグイン</a> | <a href="https://github.com/iamthe000/CAFFEETERIA">軽量版(CAFFEETERIA)</a> | <a href="https://github.com/iamthe000/caffeine">CAFFEINE CLI TOOL</a>
 
 </div>
 
