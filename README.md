@@ -22,7 +22,7 @@
 
 <div align="center">
 
-<a href="ja-README.md">🇯🇵 日本語</a> | <a href="TECHNICAL_ja.md">Technical Specs (JP)</a> | <a href="PLUGINS_ja.md">Plugin Dev (JP)</a> | <a href="Nuitka_Step.md">Nuitka Guide</a> | <a href="Setup_PATH.md">PATH Setup</a> | <a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">Official Japanese UI Plugin</a> | <a href="https://github.com/iamthe000/CAFFEETERIA">Light version(CAFFEETERIA)</a> | <a href="https://github.com/iamthe000/caffeine">CAFFEINE CLI TOOL</a>
+<a href="ja-README.md">🇯🇵 日本語</a> | <a href="TECHNICAL_ja.md">Technical Specs (JP)</a> | <a href="PLUGINS_ja.md">Plugin Dev (JP)</a> | <a href="Nuitka_Step.md">Nuitka Guide</a> | <a href="Setup_PATH.md">PATH Setup</a> | <a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">Official Japanese UI Plugin</a> | <a href="https://github.com/iamthe000/CAFFEETERIA">Light version(CAFFEETERIA)</a> | <a href="https://github.com/iamthe000/caffeine">CAFFEINE CLI TOOL(gotocafe)</a>
 
 </div>
 
