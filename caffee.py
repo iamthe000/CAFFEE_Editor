@@ -32,6 +32,7 @@ CTRL_L = 12 # Next Tab
 CTRL_N = 14
 CTRL_O = 15
 CTRL_P = 16
+CTRL_Q = 17
 CTRL_R = 18
 CTRL_S = 19 # New Tab / Start Screen
 CTRL_T = 20
@@ -88,7 +89,7 @@ DEFAULT_CONFIG = {
     # --- Keybinding Display ---
     "displayed_keybindings": [
         "close_tab", "new_start", "next_tab", "save", "cut", "paste", "search",
-        "undo", "redo", "copy", "build", "mark", "select_all", "goto",
+        "undo", "redo", "copy", "center", "build", "mark", "select_all", "goto",
         "delete_line", "comment", "explorer", "terminal", "line_end", "command", "template", "relative_linenum"
     ],
     # --------------------------
@@ -294,6 +295,7 @@ DEFAULT_KEYBINDINGS = {
     "undo": {"key": "^Z", "label": "Undo"},
     "redo": {"key": "^R", "label": "Redo"},
     "copy": {"key": "^C", "label": "Copy"},
+    "center": {"key": "^Q", "label": "Center"},
     "build": {"key": "^B", "label": "Build"},
     "mark": {"key": "^6", "label": "Mark"},
     "select_all": {"key": "^A", "label": "All"},
@@ -1908,6 +1910,8 @@ class Editor:
             'new': self._command_new,
             'set': self._command_set,
             'diff': self.show_diff,
+            'zz': self._command_center,
+            'center': self._command_center,
             'delcomm': self._command_delcomm,
             'deletecomments': self._command_delcomm,
             'undo': self._command_undo,
@@ -3772,6 +3776,41 @@ class Editor:
             # 右端に到達した場合、見える範囲を右にシフト
             self.col_offset = self.cursor_x - actual_edit_w + 1
 
+    def center_cursor(self):
+        """カーソル位置を画面の中央になるようにスクロール位置を調整する (zz相当)"""
+        self.scroll_offset = max(0, self.cursor_y - self.get_edit_height() // 2)
+
+    def jump_paragraph_up(self):
+        """前の空行（段落の先頭）へジャンプする (Shift+Up)"""
+        if self.cursor_y == 0:
+            return
+        
+        target_y = self.cursor_y - 1
+        # Skip consecutive empty lines if already on one
+        while target_y > 0 and not self.buffer.lines[target_y].strip():
+            target_y -= 1
+        
+        while target_y > 0 and self.buffer.lines[target_y].strip():
+            target_y -= 1
+            
+        self.move_cursor(target_y, 0, update_desired_x=True)
+
+    def jump_paragraph_down(self):
+        """次の空行（段落の末尾）へジャンプする (Shift+Down)"""
+        last_y = len(self.buffer) - 1
+        if self.cursor_y >= last_y:
+            return
+            
+        target_y = self.cursor_y + 1
+        # Skip consecutive empty lines if already on one
+        while target_y < last_y and not self.buffer.lines[target_y].strip():
+            target_y += 1
+            
+        while target_y < last_y and self.buffer.lines[target_y].strip():
+            target_y += 1
+            
+        self.move_cursor(target_y, 0, update_desired_x=True)
+
     def _update_clipboard(self, lines, is_line=False):
         """内部クリップボードとシステムクリップボードを更新する"""
         self.clipboard = lines
@@ -4289,6 +4328,10 @@ class Editor:
         self.filename = filename
         self.save_file()
 
+    def _command_center(self, *args):
+        """'center' (zz)コマンド: カーソルを画面中央にスクロール"""
+        self.center_cursor()
+
     def _command_explorer_width(self, width=None):
         """'expw'コマンド: エクスプローラーの幅を設定"""
         if width is None:
@@ -4663,10 +4706,11 @@ class Editor:
                 key_in = self.stdscr.get_wch()
                 self.stdscr.timeout(-1)
                 
-                # ブラケットペースト開始シーケンス \x1b[200~ の検知
+                # ブラケットペースト開始シーケンス \x1b[200~ の検知、および Shift+Arrow の検知
                 if key_in == '\x1b' or key_in == 27:
                     self.stdscr.nodelay(True)
                     paste_detected = False
+                    shift_jump = False
                     consumed = []
                     try:
                         seq = ""
@@ -4682,13 +4726,21 @@ class Editor:
                                 self._handle_bracketed_paste()
                                 paste_detected = True
                                 break
-                            elif not "[200~".startswith(seq):
+                            elif seq == "[1;2A":
+                                self.jump_paragraph_up()
+                                shift_jump = True
+                                break
+                            elif seq == "[1;2B":
+                                self.jump_paragraph_down()
+                                shift_jump = True
+                                break
+                            elif not ("[200~".startswith(seq) or "[1;2A".startswith(seq) or "[1;2B".startswith(seq)):
                                 break
                     except curses.error:
                         pass
                     
                     self.stdscr.nodelay(False)
-                    if paste_detected:
+                    if paste_detected or shift_jump:
                         continue
                     else:
                         # 読みすぎた文字をキューに戻す
@@ -4850,6 +4902,8 @@ class Editor:
 
             if key_code == CTRL_D:
                 self.show_diff()
+            elif key_code == CTRL_Q:
+                self.center_cursor()
             elif key_code == CTRL_C:
                 self.perform_copy()
             elif key_code == CTRL_X:
@@ -4892,6 +4946,10 @@ class Editor:
                     self.selected_suggestion_idx = (self.selected_suggestion_idx + 1) % len(self.suggestions)
                 else:
                     self.move_cursor(self.cursor_y + 1, self.desired_x)
+            elif key_code == getattr(curses, "KEY_SR", 547):  # Fallback for Shift+Up
+                self.jump_paragraph_up()
+            elif key_code == getattr(curses, "KEY_SF", 525):  # Fallback for Shift+Down
+                self.jump_paragraph_down()
             elif key_code == curses.KEY_LEFT:
                 self.suggestion_active = False
                 self.move_cursor(self.cursor_y, self.cursor_x - 1, update_desired_x=True)
