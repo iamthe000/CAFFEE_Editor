@@ -23,7 +23,13 @@
 
 <div align="center">
 
-<a href="README.md">🇬🇧 English</a> | <a href="TECHNICAL_ja.md">技術仕様書</a> | <a href="PLUGINS_ja.md">プラグイン開発</a> | <a href="Nuitka_Step.md">Nuitkaによる高速化手順</a> | <a href="Setup_PATH.md">PATHのセットアップ方法</a> | <a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">公式UI日本語化プラグイン</a> | <a href="https://github.com/iamthe000/CAFFEETERIA">軽量版(CAFFEETERIA)</a> | <a href="https://github.com/iamthe000/caffeine">CAFFEINE使用用のCLIツール(gotocafe)</a>
+<a href="README.md">🇬🇧 English</a> | <a href="TECHNICAL_ja.md">技術仕様書</a> | <a href="PLUGINS_ja.md">プラグイン開発</a> | <a href="Nuitka_Step.md">Nuitkaによる高速化手順</a> | <a href="Setup_PATH.md">PATHのセットアップ方法</a>
+
+</div>
+
+<div align="center">
+
+<a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">公式UI日本語化プラグイン</a> | <a href="https://github.com/iamthe000/CAFFEETERIA">軽量版(CAFFEETERIA)</a>
 
 </div>
 
@@ -145,7 +151,7 @@ pip install caffee --upgrade
 | `Ctrl+T` | テンプレートを挿入 |
 | `Ctrl+B` | 現在のファイルをビルド/実行 |
 | `Ctrl+D` | 現在のファイルのGit差分を表示 |
-| `Ctrl+P` | コマンドモードに入る |
+| `Ctrl+P` | コマンドモードに入る（スタート画面ではプラグインマネージャーを開く） |
 | `Esc` | パネルからエディタに戻る |
 
 ---
@@ -178,6 +184,9 @@ pip install caffee --upgrade
 | `template <lang>` | | 指定した言語のテンプレートを挿入する。 |
 | `macro <file>` | | CAFFEINE マクロファイルを実行する。 |
 | `csv` | | 現在のCSVバッファを整形されたテーブル形式でプレビュー表示する。 |
+| `gemini <prompt>` | | 現在のバッファをコンテキストにしてGoogleのGemini AIに質問する。 |
+| `openai <prompt>` | | 現在のバッファをコンテキストにしてOpenAIのChatGPTに質問する。 |
+| `claude <prompt>` | | 現在のバッファをコンテキストにしてAnthropicのClaude AIに質問する。 |
 
 ---
 
@@ -223,6 +232,17 @@ pip install caffee --upgrade
 - **`explorer_show_details`**: エクスプローラーでファイルサイズと更新日時を表示。
 - **`displayed_keybindings`**: フッターバーに表示するキーバインドをカスタマイズ。
 - **`colors`**: すべてのUI要素の包括的な色カスタマイズ。
+
+### AI 設定
+AIコマンド（`:gemini`, `:openai`, `:claude`）を使用するには、APIキーの設定が必要です。以下のフォーマットで `~/.caffee_setting/ai_api.json` というファイルを作成してください。
+
+```json
+{
+  "gemini_api_key": "あなたのGoogle_GeminiのAPIキー",
+  "openai_api_key": "あなたのOpenAIのAPIキー",
+  "claude_api_key": "あなたのAnthropic_ClaudeのAPIキー"
+}
+```
 
 ---
 
