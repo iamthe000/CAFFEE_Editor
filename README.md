@@ -22,7 +22,13 @@
 
 <div align="center">
 
-<a href="ja-README.md">🇯🇵 日本語</a> | <a href="TECHNICAL_ja.md">Technical Specs (JP)</a> | <a href="PLUGINS_ja.md">Plugin Dev (JP)</a> | <a href="Nuitka_Step.md">Nuitka Guide</a> | <a href="Setup_PATH.md">PATH Setup</a> | <a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">Official Japanese UI Plugin</a> | <a href="https://github.com/iamthe000/CAFFEETERIA">Light version(CAFFEETERIA)</a> | <a href="https://github.com/iamthe000/caffeine">CAFFEINE CLI TOOL(gotocafe)</a>
+<a href="ja-README.md">🇯🇵 日本語</a> | <a href="TECHNICAL_ja.md">Technical Specs (JP)</a> | <a href="PLUGINS_ja.md">Plugin Dev (JP)</a> | <a href="Nuitka_Step.md">Nuitka Guide</a> | <a href="Setup_PATH.md">PATH Setup</a>
+
+</div>
+
+<div align="center">
+
+<a href="https://github.com/iamthe000/CAFFEE_Editor_Japanese_UI_plugin_Official.git">Official Japanese UI Plugin</a> | <a href="https://github.com/iamthe000/CAFFEETERIA">Light version(CAFFEETERIA)</a>
 
 </div>
 
@@ -143,7 +149,7 @@ For significantly faster startup, compile with Nuitka. See the [Nuitka Compilati
 | `Ctrl+T` | Insert template |
 | `Ctrl+B` | Build/Run current file |
 | `Ctrl+D` | Show Git diff for the current file |
-| `Ctrl+P` | Enter Command Mode |
+| `Ctrl+P` | Enter Command Mode (or Open Plugin Manager on Start Screen) |
 | `Esc` | Return to editor from panels |
 
 ---
@@ -176,6 +182,9 @@ Press `Ctrl+P` to enter Command Mode, then type a command and press Enter.
 | `template <lang>` | | Insert a template for the specified language. |
 | `macro <file>` | | Execute a CAFFEINE macro file. |
 | `csv` | | Show a formatted table preview of the current CSV buffer. |
+| `gemini <prompt>` | | Ask Google's Gemini AI a question using the buffer as context. |
+| `openai <prompt>` | | Ask OpenAI's ChatGPT a question using the buffer as context. |
+| `claude <prompt>` | | Ask Anthropic's Claude AI a question using the buffer as context. |
 
 ---
 
@@ -222,6 +231,17 @@ User settings are stored in `~/.caffee_setting/setting.json`. You can edit this 
 - **`explorer_show_details`**: Show file size and modification date in the explorer.
 - **`displayed_keybindings`**: Customize which keybindings appear in the footer bar.
 - **`colors`**: Comprehensive color customization for all UI elements.
+
+### AI Configuration
+To use the AI commands (`:gemini`, `:openai`, `:claude`), you must configure your API keys. Create a file named `~/.caffee_setting/ai_api.json` with the following format:
+
+```json
+{
+  "gemini_api_key": "your_google_gemini_api_key",
+  "openai_api_key": "your_openai_api_key",
+  "claude_api_key": "your_anthropic_claude_api_key"
+}
+```
 
 ---
 
