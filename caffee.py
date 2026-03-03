@@ -32,7 +32,6 @@ CTRL_L = 12 # Next Tab
 CTRL_N = 14
 CTRL_O = 15
 CTRL_P = 16
-CTRL_Q = 17
 CTRL_R = 18
 CTRL_S = 19 # New Tab / Start Screen
 CTRL_T = 20
@@ -89,7 +88,7 @@ DEFAULT_CONFIG = {
     # --- Keybinding Display ---
     "displayed_keybindings": [
         "close_tab", "new_start", "next_tab", "save", "cut", "paste", "search",
-        "undo", "redo", "copy", "center", "build", "mark", "select_all", "goto",
+        "undo", "redo", "copy", "build", "mark", "select_all", "goto",
         "delete_line", "comment", "explorer", "terminal", "line_end", "command", "template", "relative_linenum"
     ],
     # --------------------------
@@ -295,7 +294,6 @@ DEFAULT_KEYBINDINGS = {
     "undo": {"key": "^Z", "label": "Undo"},
     "redo": {"key": "^R", "label": "Redo"},
     "copy": {"key": "^C", "label": "Copy"},
-    "center": {"key": "^Q", "label": "Center"},
     "build": {"key": "^B", "label": "Build"},
     "mark": {"key": "^6", "label": "Mark"},
     "select_all": {"key": "^A", "label": "All"},
@@ -628,6 +626,22 @@ def load_config():
             load_error = f"Config load error: {e}"
             
     return user_config, load_error
+
+def load_ai_api_config():
+    """AI API設定ファイル(ai_api.json)を読み込む"""
+    setting_dir = get_config_dir()
+    setting_file = os.path.join(setting_dir, "ai_api.json")
+    ai_config = {}
+    load_error = None
+
+    if os.path.exists(setting_file):
+        try:
+            with open(setting_file, 'r', encoding='utf-8') as f:
+                ai_config = json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            load_error = f"AI API Config load error: {e}"
+            
+    return ai_config, load_error
 
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 def strip_ansi(text):
@@ -1823,6 +1837,9 @@ class Editor:
             self.config["templates"].update(user_config.pop("templates"))
         self.config.update(user_config)
 
+        # AI API設定をロード
+        self.ai_api_config, ai_api_error = load_ai_api_config()
+
         self.vim_mode = self.config.get("vim_mode", False)
         self.vim_state = 'normal' if self.vim_mode else 'insert'
         self.vim_last_key = None
@@ -1910,8 +1927,6 @@ class Editor:
             'new': self._command_new,
             'set': self._command_set,
             'diff': self.show_diff,
-            'zz': self._command_center,
-            'center': self._command_center,
             'delcomm': self._command_delcomm,
             'deletecomments': self._command_delcomm,
             'undo': self._command_undo,
@@ -1930,6 +1945,9 @@ class Editor:
             'template': self._command_template,
             'macro': self._command_macro,
             'csv': self._command_csv,
+            'gemini': self._command_gemini,
+            'openai': self._command_openai,
+            'claude': self._command_claude
         }
 
         self.init_colors()
@@ -2614,6 +2632,143 @@ class Editor:
 
         self.tabs.append(new_tab)
         self.active_tab_idx = len(self.tabs) - 1
+
+    def _get_context_for_ai(self):
+        """AIコマンド用のコンテキスト（選択範囲または全体）を取得"""
+        sel = self.get_selection_range()
+        if sel:
+            start, end = sel
+            lines = []
+            if start[0] == end[0]:
+                lines.append(self.buffer.lines[start[0]][start[1]:end[1]])
+            else:
+                lines.append(self.buffer.lines[start[0]][start[1]:])
+                for i in range(start[0] + 1, end[0]):
+                    lines.append(self.buffer.lines[i])
+                lines.append(self.buffer.lines[end[0]][:end[1]])
+            return "\n".join(lines)
+        return ""
+
+    def _show_ai_result(self, title, content):
+        """AIの結果を新しいタブで表示"""
+        lines = content.splitlines() if content else ["No response."]
+        ai_tab_name = f"ai://{title}"
+        new_tab = EditorTab(Buffer(lines), ai_tab_name, self.syntax_rules.get(".txt"), None)
+        new_tab.read_only = True
+        self.tabs.append(new_tab)
+        self.active_tab_idx = len(self.tabs) - 1
+
+    def _command_gemini(self, *args):
+        """'gemini'コマンド: Gemini APIを呼び出す"""
+        api_key = self.ai_api_config.get("gemini_api_key")
+        if not api_key:
+            self.set_status("Error: gemini_api_key not found in .caffee_setting/ai_api.json", timeout=5)
+            return
+
+        prompt = self._prompt_for_input("Gemini Prompt: ")
+        if not prompt:
+            return
+
+        context = self._get_context_for_ai()
+        if context:
+            prompt += f"\n\nContext:\n{context}"
+
+        self.set_status("Thinking (Gemini)...", timeout=10)
+        self.redraw_screen()
+
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+            data = json.dumps({
+                "contents": [{"parts": [{"text": prompt}]}]
+            }).encode('utf-8')
+            req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
+            
+            with urllib.request.urlopen(req, timeout=15) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                
+            text = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+            self._show_ai_result("Gemini", text)
+            self.set_status("Gemini response received.", timeout=3)
+        except Exception as e:
+            self.set_status(f"Gemini API Error: {e}", timeout=5)
+
+    def _command_openai(self, *args):
+        """'openai'コマンド: OpenAI APIを呼び出す"""
+        api_key = self.ai_api_config.get("openai_api_key")
+        if not api_key:
+            self.set_status("Error: openai_api_key not found in .caffee_setting/ai_api.json", timeout=5)
+            return
+
+        prompt = self._prompt_for_input("OpenAI Prompt: ")
+        if not prompt:
+            return
+
+        context = self._get_context_for_ai()
+        if context:
+            prompt += f"\n\nContext:\n{context}"
+
+        self.set_status("Thinking (OpenAI)...", timeout=10)
+        self.redraw_screen()
+
+        try:
+            url = "https://api.openai.com/v1/chat/completions"
+            data = json.dumps({
+                "model": "gpt-4o-mini",
+                "messages": [{"role": "user", "content": prompt}]
+            }).encode('utf-8')
+            req = urllib.request.Request(url, data=data, headers={
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {api_key}'
+            })
+            
+            with urllib.request.urlopen(req, timeout=15) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                
+            text = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+            self._show_ai_result("OpenAI", text)
+            self.set_status("OpenAI response received.", timeout=3)
+        except Exception as e:
+            self.set_status(f"OpenAI API Error: {e}", timeout=5)
+
+    def _command_claude(self, *args):
+        """'claude'コマンド: Anthropic APIを呼び出す"""
+        api_key = self.ai_api_config.get("claude_api_key")
+        if not api_key:
+            self.set_status("Error: claude_api_key not found in .caffee_setting/ai_api.json", timeout=5)
+            return
+
+        prompt = self._prompt_for_input("Claude Prompt: ")
+        if not prompt:
+            return
+
+        context = self._get_context_for_ai()
+        if context:
+            prompt += f"\n\nContext:\n{context}"
+
+        self.set_status("Thinking (Claude)...", timeout=10)
+        self.redraw_screen()
+
+        try:
+            url = "https://api.anthropic.com/v1/messages"
+            data = json.dumps({
+                "model": "claude-3-5-haiku-20241022",
+                "max_tokens": 1024,
+                "messages": [{"role": "user", "content": prompt}]
+            }).encode('utf-8')
+            req = urllib.request.Request(url, data=data, headers={
+                'Content-Type': 'application/json',
+                'x-api-key': api_key,
+                'anthropic-version': '2023-06-01'
+            })
+            
+            with urllib.request.urlopen(req, timeout=15) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                
+            text = result.get("content", [{}])[0].get("text", "")
+            self._show_ai_result("Claude", text)
+            self.set_status("Claude response received.", timeout=3)
+        except Exception as e:
+            self.set_status(f"Claude API Error: {e}", timeout=5)
 
     def _command_csv(self, *args):
         """'csv' command: Show a table preview of the current CSV buffer."""
@@ -3776,41 +3931,6 @@ class Editor:
             # 右端に到達した場合、見える範囲を右にシフト
             self.col_offset = self.cursor_x - actual_edit_w + 1
 
-    def center_cursor(self):
-        """カーソル位置を画面の中央になるようにスクロール位置を調整する (zz相当)"""
-        self.scroll_offset = max(0, self.cursor_y - self.get_edit_height() // 2)
-
-    def jump_paragraph_up(self):
-        """前の空行（段落の先頭）へジャンプする (Shift+Up)"""
-        if self.cursor_y == 0:
-            return
-        
-        target_y = self.cursor_y - 1
-        # Skip consecutive empty lines if already on one
-        while target_y > 0 and not self.buffer.lines[target_y].strip():
-            target_y -= 1
-        
-        while target_y > 0 and self.buffer.lines[target_y].strip():
-            target_y -= 1
-            
-        self.move_cursor(target_y, 0, update_desired_x=True)
-
-    def jump_paragraph_down(self):
-        """次の空行（段落の末尾）へジャンプする (Shift+Down)"""
-        last_y = len(self.buffer) - 1
-        if self.cursor_y >= last_y:
-            return
-            
-        target_y = self.cursor_y + 1
-        # Skip consecutive empty lines if already on one
-        while target_y < last_y and not self.buffer.lines[target_y].strip():
-            target_y += 1
-            
-        while target_y < last_y and self.buffer.lines[target_y].strip():
-            target_y += 1
-            
-        self.move_cursor(target_y, 0, update_desired_x=True)
-
     def _update_clipboard(self, lines, is_line=False):
         """内部クリップボードとシステムクリップボードを更新する"""
         self.clipboard = lines
@@ -4328,10 +4448,6 @@ class Editor:
         self.filename = filename
         self.save_file()
 
-    def _command_center(self, *args):
-        """'center' (zz)コマンド: カーソルを画面中央にスクロール"""
-        self.center_cursor()
-
     def _command_explorer_width(self, width=None):
         """'expw'コマンド: エクスプローラーの幅を設定"""
         if width is None:
@@ -4706,11 +4822,10 @@ class Editor:
                 key_in = self.stdscr.get_wch()
                 self.stdscr.timeout(-1)
                 
-                # ブラケットペースト開始シーケンス \x1b[200~ の検知、および Shift+Arrow の検知
+                # ブラケットペースト開始シーケンス \x1b[200~ の検知
                 if key_in == '\x1b' or key_in == 27:
                     self.stdscr.nodelay(True)
                     paste_detected = False
-                    shift_jump = False
                     consumed = []
                     try:
                         seq = ""
@@ -4726,21 +4841,13 @@ class Editor:
                                 self._handle_bracketed_paste()
                                 paste_detected = True
                                 break
-                            elif seq == "[1;2A":
-                                self.jump_paragraph_up()
-                                shift_jump = True
-                                break
-                            elif seq == "[1;2B":
-                                self.jump_paragraph_down()
-                                shift_jump = True
-                                break
-                            elif not ("[200~".startswith(seq) or "[1;2A".startswith(seq) or "[1;2B".startswith(seq)):
+                            elif not "[200~".startswith(seq):
                                 break
                     except curses.error:
                         pass
                     
                     self.stdscr.nodelay(False)
-                    if paste_detected or shift_jump:
+                    if paste_detected:
                         continue
                     else:
                         # 読みすぎた文字をキューに戻す
@@ -4902,8 +5009,6 @@ class Editor:
 
             if key_code == CTRL_D:
                 self.show_diff()
-            elif key_code == CTRL_Q:
-                self.center_cursor()
             elif key_code == CTRL_C:
                 self.perform_copy()
             elif key_code == CTRL_X:
@@ -4946,10 +5051,6 @@ class Editor:
                     self.selected_suggestion_idx = (self.selected_suggestion_idx + 1) % len(self.suggestions)
                 else:
                     self.move_cursor(self.cursor_y + 1, self.desired_x)
-            elif key_code == getattr(curses, "KEY_SR", 547):  # Fallback for Shift+Up
-                self.jump_paragraph_up()
-            elif key_code == getattr(curses, "KEY_SF", 525):  # Fallback for Shift+Down
-                self.jump_paragraph_down()
             elif key_code == curses.KEY_LEFT:
                 self.suggestion_active = False
                 self.move_cursor(self.cursor_y, self.cursor_x - 1, update_desired_x=True)
