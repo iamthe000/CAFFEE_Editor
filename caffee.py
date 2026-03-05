@@ -2676,21 +2676,39 @@ class Editor:
         self.set_status("Thinking (Gemini)...", timeout=10)
         self.redraw_screen()
 
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-            data = json.dumps({
-                "contents": [{"parts": [{"text": prompt}]}]
-            }).encode('utf-8')
-            req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
-            
-            with urllib.request.urlopen(req, timeout=15) as response:
-                result = json.loads(response.read().decode('utf-8'))
-                
-            text = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-            self._show_ai_result("Gemini", text)
-            self.set_status("Gemini response received.", timeout=3)
-        except Exception as e:
-            self.set_status(f"Gemini API Error: {e}", timeout=5)
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key={api_key}"
+        data = json.dumps({
+            "contents": [{"parts": [{"text": prompt}]}]
+        }).encode('utf-8')
+        req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
+        
+        max_retries = 3
+        backoff_time = 5
+
+        for attempt in range(max_retries):
+            try:
+                with urllib.request.urlopen(req, timeout=15) as response:
+                    result = json.loads(response.read().decode('utf-8'))
+                    
+                text = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                self._show_ai_result("Gemini", text)
+                self.set_status("Gemini response received.", timeout=3)
+                return
+            except urllib.error.HTTPError as e:
+                if e.code == 429:
+                    if attempt < max_retries - 1:
+                        self.set_status(f"Gemini API: Rate limit hit, retrying in {backoff_time}s...", timeout=backoff_time)
+                        self.redraw_screen()
+                        time.sleep(backoff_time)
+                        backoff_time *= 2
+                    else:
+                        self.set_status("Gemini API Error: Rate limit exceeded (429 Too Many Requests). Please try again later.", timeout=5)
+                else:
+                    self.set_status(f"Gemini API Error: {e}", timeout=5)
+                    return
+            except Exception as e:
+                self.set_status(f"Gemini API Error: {e}", timeout=5)
+                return
 
     def _command_openai(self, *args):
         """'openai'コマンド: OpenAI APIを呼び出す"""
