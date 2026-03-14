@@ -32,6 +32,7 @@ CTRL_L = 12 # Next Tab
 CTRL_N = 14
 CTRL_O = 15
 CTRL_P = 16
+CTRL_Q = 17
 CTRL_R = 18
 CTRL_S = 19 # New Tab / Start Screen
 CTRL_T = 20
@@ -302,6 +303,7 @@ DEFAULT_KEYBINDINGS = {
     "comment": {"key": "^/", "label": "Comment"},
     "explorer": {"key": "^F", "label": "Explorer"},
     "terminal": {"key": "^N", "label": "Terminal"},
+    "line_home": {"key": "^Q", "label": "LineHome"},
     "line_end": {"key": "^E", "label": "LineEnd"},
     "command": {"key": "^P", "label": "Command"},
     "diff": {"key": "^D", "label": "Diff"},
@@ -5050,7 +5052,11 @@ class Editor:
                     self.set_status("Mark Set", timeout=2)
             elif key_code == CTRL_G: self.goto_line()
             elif key_code == CTRL_A: self.select_all()
+            elif key_code == CTRL_Q:
+                self.suggestion_active = False
+                self.move_cursor(self.cursor_y, 0, update_desired_x=True)
             elif key_code == CTRL_E: 
+                self.suggestion_active = False
                 self.move_cursor(self.cursor_y, len(self.buffer.lines[self.cursor_y]), update_desired_x=True)
             elif key_code == CTRL_SLASH: self.toggle_comment()
             elif key_code == CTRL_Y: self.delete_line()
@@ -5075,6 +5081,12 @@ class Editor:
             elif key_code == curses.KEY_RIGHT:
                 self.suggestion_active = False
                 self.move_cursor(self.cursor_y, self.cursor_x + 1, update_desired_x=True)
+            elif key_code == curses.KEY_HOME:
+                self.suggestion_active = False
+                self.move_cursor(self.cursor_y, 0, update_desired_x=True)
+            elif key_code == curses.KEY_END:
+                self.suggestion_active = False
+                self.move_cursor(self.cursor_y, len(self.buffer.lines[self.cursor_y]), update_desired_x=True)
             elif key_code == curses.KEY_PPAGE:
                 self.suggestion_active = False
                 self.move_cursor(self.cursor_y - self.get_edit_height(), self.cursor_x, update_desired_x=True)

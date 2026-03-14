@@ -138,6 +138,7 @@ pip install caffee --upgrade
 |-----|------|
 | `Ctrl+W` | 検索（正規表現サポート） |
 | `Ctrl+G` | 行番号へジャンプ |
+| `Ctrl+Q` | 行頭へ移動 |
 | `Ctrl+E` | 行末へ移動 |
 | `Ctrl+A` | 全選択 / 選択解除 |
 | `Ctrl+6` | マークを設定/解除 |
