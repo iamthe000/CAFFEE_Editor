@@ -136,6 +136,7 @@ For significantly faster startup, compile with Nuitka. See the [Nuitka Compilati
 |-----|--------|
 | `Ctrl+W` | Search (with regex support) |
 | `Ctrl+G` | Go to line number |
+| `Ctrl+Q` | Move to beginning of line |
 | `Ctrl+E` | Move to end of line |
 | `Ctrl+A` | Select all / Clear selection |
 | `Ctrl+6` | Set/Unset mark (selection start) |
