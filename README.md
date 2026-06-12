@@ -9,6 +9,7 @@
 </div>
 
 <div align="center">
+ PyPI total downloads exceeded 20K! 🎉<br>
  PyPI total downloads exceeded 10K! 🎉<br>
  PyPI total downloads exceeded 5K! 🎉
     
